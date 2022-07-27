@@ -49,16 +49,16 @@ def main():
     hsi_img = im.load_gray_images(img_dir);
     hsi_ref = im.load_gray_images(ref_dir);    
 
-    ref_espectral = espectral_roi(hsi_ref,15);
-    img_espectral = espectral_roi(hsi_img,15);
+    ref_espectral = espectral_roi(hsi_ref);
+    img_espectral = espectral_roi(hsi_img);
 
 
     white_espectral = np.divide(ref_espectral, ref_espectral); 
     hand_espectral = np.divide(img_espectral, ref_espectral);
 
     plt.figure(figsize=(5,5));
-    plt.plot(wavelength, white_espectral, '-b', label="Reflectância de branco puro");
-    plt.plot(wavelength, hand_espectral, '-r', label="Reflectância de pele");
+    plt.semilogy(wavelength, white_espectral, '-b', label="Reflectância de branco puro");
+    plt.semilogy(wavelength, hand_espectral, '-r', label="Reflectância de pele");
     plt.title("Curva espectral de reflectância");
     plt.legend();
     plt.show();
