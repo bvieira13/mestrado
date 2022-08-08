@@ -13,9 +13,21 @@ def equalize_histogram(img):
   img_out = img_norm.astype(np.uint8);
   return img_out
 
-def load_data(file, n):
+def load_data(file_dir,n):
+    data = [];
+    file = open(file_dir,'r');
+    size = len(file.readlines());
+    file.close();
     
+    file = open(file_dir,'r');
+    for i in range(0, size):
+        content = file.readline();
+        split_line = content.split();
+        for j in range(0,n):
+            value = float(split_line[j]);
+            data[j]
     return data
+
 def espectral_square_roi(hsi_img, index = 25):
     
     [img_mask, points] = im.polyroi(hsi_img[index])
@@ -58,6 +70,22 @@ def espectral_roi(hsi_img, index = 23):
     
     return vec_espctral;
 
+
+def plot_absorption():
+    abs_data = np.loadtxt('hb_hb02_absorption.txt', usecols=range(0,3));
+    wavelength = abs_data[:,0];
+    hb02_absorption = abs_data[:,1];
+    hb_absorption = abs_data[:,2];
+    plt.figure(figsize=(5,5));
+    plt.semilogy(wavelength, hb02_absorption, '-b', label='Hb02');
+    plt.semilogy(wavelength, hb_absorption, '-r', label='Hb');
+    plt.title('Curva espectral de oxi e desoxihemoglobina');
+    plt.xlabel('Comprimento de onda (nm)');
+    plt.ylabel('Absorbância')
+    plt.legend();
+    plt.show();
+
+
 def main():
     current_dir = os.getcwd();
     wavelength = np.linspace(400,720,33);
@@ -68,47 +96,38 @@ def main():
     hsi_img = im.load_gray_images(img_dir);
     hsi_ref = im.load_gray_images(ref_dir);    
 
-<<<<<<< HEAD
-    ref_espectral = espectral_roi(hsi_ref);
-=======
-    ref_espectral = espectral_square_roi(hsi_ref);
->>>>>>> e73fcd4fab71b10cfbc3d2b6095530bfcacecbbb
-    img_espectral = espectral_roi(hsi_img);
+    plot_absorption();
+    # ref_espectral = espectral_square_roi(hsi_ref);
+    # img_espectral = espectral_roi(hsi_img);
 
 
-    white_espectral = np.divide(ref_espectral, ref_espectral); 
-    hand_espectral = np.divide(img_espectral, ref_espectral);
-    hand_norm = [];
+    # white_espectral = np.divide(ref_espectral, ref_espectral); 
+    # hand_espectral = np.divide(img_espectral, ref_espectral);
+    # hand_norm = [];
 
-    for k in range(0, len(hsi_img)):
-        norm = hsi_img[k][:,:]/ref_espectral[k];
-        hand_norm.append(norm);
+    # for k in range(0, len(hsi_img)):
+    #     norm = hsi_img[k][:,:]/ref_espectral[k];
+    #     hand_norm.append(norm);
 
-    file_name = 'hsi_reflectance_norm.png'
-    dst_folder = current_dir + '\\results\\';
-    scr_folder = current_dir + '\\';
+    # file_name = 'hsi_reflectance_norm.png'
+    # dst_folder = current_dir + '\\results\\';
+    # scr_folder = current_dir + '\\';
 
-    plt.figure(figsize=(5,5));
-<<<<<<< HEAD
-    plt.semilogy(wavelength, white_espectral, '-b', label="Reflectância de branco puro");
-    plt.semilogy(wavelength, hand_espectral, '-r', label="Reflectância de pele");
-    plt.title("Curva espectral de reflectância");
-=======
-    plt.semilogy(wavelength, white_espectral, '-b', label='Branco');
-    plt.semilogy(wavelength, hand_espectral, '-r', label='Tecido cutâneo');
-    plt.title('Curva espectral de tecido cutâneo');
-    plt.xlabel('Comprimento de onda (nm)');
-    plt.ylabel('Reflectância normalizada')
->>>>>>> e73fcd4fab71b10cfbc3d2b6095530bfcacecbbb
-    plt.legend();
-    plt.savefig(file_name);
-    plt.show();
+    # plt.figure(figsize=(5,5));
+    # plt.semilogy(wavelength, white_espectral, '-b', label='Branco');
+    # plt.semilogy(wavelength, hand_espectral, '-r', label='Tecido cutâneo');
+    # plt.title('Curva espectral de tecido cutâneo');
+    # plt.xlabel('Comprimento de onda (nm)');
+    # plt.ylabel('Reflectância normalizada')
+    # plt.legend();
+    # plt.savefig(file_name);
+    # plt.show();
 
-    if os.path.exists(dst_folder + file_name):
-        path = dst_folder + file_name;
-        os.remove(path)
-        shutil.move(scr_folder + file_name, dst_folder + file_name)
-    else:
-        shutil.move(scr_folder + file_name, dst_folder + file_name)
+    # if os.path.exists(dst_folder + file_name):
+    #     path = dst_folder + file_name;
+    #     os.remove(path)
+    #     shutil.move(scr_folder + file_name, dst_folder + file_name)
+    # else:
+    #     shutil.move(scr_folder + file_name, dst_folder + file_name)
 
 main()
