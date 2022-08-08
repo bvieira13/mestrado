@@ -70,15 +70,18 @@ def espectral_roi(hsi_img, index = 23):
     
     return vec_espctral;
 
-
-def plot_absorption():
+def load_absorption():
     abs_data = np.loadtxt('hb_hb02_absorption.txt', usecols=range(0,3));
     wavelength = abs_data[:,0];
     hb02_absorption = abs_data[:,1];
     hb_absorption = abs_data[:,2];
+    return wavelength, hb02_absorption, hb_absorption
+
+def plot_absorption():
+    wavelength, hb02_absorption, hb_absorption = load_absorption();
     plt.figure(figsize=(5,5));
-    plt.semilogy(wavelength, hb02_absorption, '-b', label='Hb02');
-    plt.semilogy(wavelength, hb_absorption, '-r', label='Hb');
+    plt.semilogy(wavelength, hb02_absorption, '-r', label='Hb02');
+    plt.semilogy(wavelength, hb_absorption, '-b', label='Hb');
     plt.title('Curva espectral de oxi e desoxihemoglobina');
     plt.xlabel('Comprimento de onda (nm)');
     plt.ylabel('Absorbância')
@@ -86,19 +89,29 @@ def plot_absorption():
     plt.show();
 
 
+
 def main():
     current_dir = os.getcwd();
-    wavelength = np.linspace(400,720,33);
+    wavelength = list(np.linspace(400,720,33));
 
     img_dir = current_dir + '\dataset\Hand';
     ref_dir = current_dir + '\dataset\Reference';
 
     hsi_img = im.load_gray_images(img_dir);
     hsi_ref = im.load_gray_images(ref_dir);    
+    wl, hb02_absorption, hb_absorption = load_absorption();
 
-    plot_absorption();
-    # ref_espectral = espectral_square_roi(hsi_ref);
+    ref_espectral = espectral_square_roi(hsi_ref);
+    hsi_img_norm = [];
+
+    for i in range(0,33):
+        hsi_img_norm.append(hsi_img[i][:,:]/ref_espectral[i]);
+
     # img_espectral = espectral_roi(hsi_img);
+
+    # plot_absorption();
+    wl = list(wl);
+    so2_b = (hb_absorption[wl.index(540)] - hb_absorption[wl.index(550)]*np.divide(hsi_img_norm[wavelength.index(550)], hsi_img_norm[wavelength.index(540)]))/(hb_absorption[wl.index(540)] - hb02_absorption[wl.index(540)]);
 
 
     # white_espectral = np.divide(ref_espectral, ref_espectral); 
@@ -129,5 +142,10 @@ def main():
     #     shutil.move(scr_folder + file_name, dst_folder + file_name)
     # else:
     #     shutil.move(scr_folder + file_name, dst_folder + file_name)
+
+    
+    plt.figure(figsize=(5,5));
+    plt.imshow(so2_b, cmap= 'RdGy');
+    plt.show();
 
 main()
