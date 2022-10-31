@@ -80,8 +80,8 @@ def load_absorption():
 def plot_absorption():
     wavelength, hb02_absorption, hb_absorption = load_absorption();
     plt.figure(figsize=(5,5));
-    plt.semilogy(wavelength, hb02_absorption, '-r', label='Hb02');
-    plt.semilogy(wavelength, hb_absorption, '-b', label='Hb');
+    plt.semilogy(wavelength, hb02_absorption, '.r', label='Hb02');
+    plt.semilogy(wavelength, hb_absorption, '.b', label='Hb');
     plt.title('Curva espectral de oxi e desoxihemoglobina');
     plt.xlabel('Comprimento de onda (nm)');
     plt.ylabel('Absorbância')
@@ -89,6 +89,26 @@ def plot_absorption():
     plt.show();
 
 
+def oxigination_plot(img, ref, wl_points):
+    wl, hb02_absorption, hb_absorption = load_absorption();
+    wavelength = list(np.linspace(400,720,33));
+
+    img_normalize = [];
+    
+    (isosbestic, non_isosbestic) = wl_points;
+
+    for i in range(0,33):
+        img_normalize.append(img[i][:,:]/ref[i]);
+    
+    wl_array = list(wl);
+    so2 = (hb_absorption[wl_array.index(isosbestic)] - hb_absorption[wl_array.index(non_isosbestic)]*np.divide(img_normalize[wavelength.index(non_isosbestic)], 
+            img_normalize[wavelength.index(isosbestic)]))/(hb_absorption[wl_array.index(isosbestic)] - hb02_absorption[wl_array.index(isosbestic)]);
+    #so2_eq = equalize_histogram(so2);
+
+    plt.figure(figsize=(5,5));
+    plt.imshow(so2, cmap= 'RdGy');
+    plt.colorbar();
+    plt.show()
 
 def main():
     current_dir = os.getcwd();
@@ -98,20 +118,13 @@ def main():
     ref_dir = current_dir + '\dataset\Reference';
 
     hsi_img = im.load_gray_images(img_dir);
-    hsi_ref = im.load_gray_images(ref_dir);    
+    hsi_ref = im.load_gray_images(ref_dir);
+
     wl, hb02_absorption, hb_absorption = load_absorption();
 
     ref_espectral = espectral_square_roi(hsi_ref);
-    hsi_img_norm = [];
 
-    for i in range(0,33):
-        hsi_img_norm.append(hsi_img[i][:,:]/ref_espectral[i]);
-
-    # img_espectral = espectral_roi(hsi_img);
-
-    # plot_absorption();
-    wl = list(wl);
-    so2_b = (hb_absorption[wl.index(540)] - hb_absorption[wl.index(550)]*np.divide(hsi_img_norm[wavelength.index(550)], hsi_img_norm[wavelength.index(540)]))/(hb_absorption[wl.index(540)] - hb02_absorption[wl.index(540)]);
+    oxigination_plot(hsi_img,ref_espectral,(570,480))
 
 
     # white_espectral = np.divide(ref_espectral, ref_espectral); 
@@ -144,8 +157,6 @@ def main():
     #     shutil.move(scr_folder + file_name, dst_folder + file_name)
 
     
-    plt.figure(figsize=(5,5));
-    plt.imshow(so2_b, cmap= 'RdGy');
-    plt.show();
 
-main()
+#main()
+plot_absorption();

@@ -1,0 +1,6 @@
+Experimento em modelo animal de camundongos tipo nude balb/c
+- iluminação com roda de LEDs brancos (brilho máximo, branco+laranja)
+- sulfato de bário em tampa de eppendorf em todas as imagens (referência)
+- LCTF UV-Vis 400-720nm Perkin-Elmer, banda 20nm (largura a meia altura)
+
+
