@@ -20,10 +20,18 @@ def equalize_histogram(img):
   img_norm = (img.astype(np.float32) - min)*255/(max-min)
   img_out = img_norm.astype(np.uint8)
   return img_out
+
+def load_absorption():
+    abs_data = np.loadtxt('hb_hb02_absorption.txt', usecols=range(0,3));
+    wavelength = abs_data[:,0];
+    hb02_absorption = abs_data[:,1];
+    hb_absorption = abs_data[:,2];
+    return wavelength, hb02_absorption, hb_absorption
+
 # %% 
 # Varáveis de definição do diretório e pasta dos quais serão extraidos os dados
-root_path = 'D:\\Documents\\Graduate\\Master\\Research\\'
-dir = 'Results\\dataset\\Hemoglobina\\Camundongo Melanoma Erika\\2022.09.30 - Camundongo\\'
+root_path = 'C:\\Users\\Bruno Vieira\\Documents\\Mestrado\\'
+dir = 'dataset\\Hemoglobina\\Camundongo Melanoma Erika\\2022.09.30 - Camundongo\\'
 folder = 'CAzul01\\FA'
 
 data_path = root_path + dir + folder 
@@ -56,4 +64,27 @@ img_roi = img_crop*img
 mean = []
 for n in range(0,len(img_roi)):
     mean.append(np.mean(img_roi[n,:,:][img_roi[n,:,:]>0]))
-print(mean)
+# %%
+# Normalizando as imagens de cada comprimento de onda
+img_norm = []
+
+for i in range(0, len(img)):
+    img_norm.append(img[i][:,:]/mean[i])
+
+# %%
+# Mostrando o mapa de calor da oxigenação
+wl, hb02_absorption, hb_absorption = load_absorption()
+wavelength = list([586, 584, 576, 570, 562, 556, 546, 540, 
+                   530, 506, 500, 480, 452, 432, 422, 414])
+
+wl_array = list(wl)
+
+(isosbestic, non_isosbestic) = (546, 556)
+
+so2 = (hb_absorption[wl_array.index(isosbestic)] - hb_absorption[wl_array.index(non_isosbestic)]*np.divide(img_norm[wavelength.index(non_isosbestic)], 
+            img_norm[wavelength.index(isosbestic)]))/(hb_absorption[wl_array.index(isosbestic)] - hb02_absorption[wl_array.index(isosbestic)]);
+
+plt.figure(figsize=(5,5));
+plt.imshow(so2, cmap= 'RdGy');
+plt.colorbar();
+plt.show()
