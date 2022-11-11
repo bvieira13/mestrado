@@ -31,8 +31,8 @@ def load_absorption():
 # %% 
 # Varáveis de definição do diretório e pasta dos quais serão extraidos os dados
 root_path = 'C:\\Users\\Bruno Vieira\\Documents\\Mestrado\\'
-dir = 'dataset\\Hemoglobina\\Camundongo Melanoma Erika\\2022.09.30 - Camundongo\\'
-folder = 'CAzul01\\FA'
+dir = 'dataset\\Hemoglobina\\Camundongo Melanoma Erika\\2022.10.03 - Camundongo\\'
+folder = 'CVerd01\\FA'
 
 data_path = root_path + dir + folder 
 # Carregando os nomes dos arquivos presentes na pasta selecionada
@@ -79,12 +79,12 @@ wavelength = list([586, 584, 576, 570, 562, 556, 546, 540,
 
 wl_array = list(wl)
 
-(isosbestic, non_isosbestic) = (546, 556)
+(isosbestic, non_isosbestic) = (570, 586)
 
 so2 = (hb_absorption[wl_array.index(isosbestic)] - hb_absorption[wl_array.index(non_isosbestic)]*np.divide(img_norm[wavelength.index(non_isosbestic)], 
             img_norm[wavelength.index(isosbestic)]))/(hb_absorption[wl_array.index(isosbestic)] - hb02_absorption[wl_array.index(isosbestic)]);
 
 plt.figure(figsize=(5,5));
-plt.imshow(so2, cmap= 'RdGy');
+plt.imshow(so2, cmap= 'RdGy_r');
 plt.colorbar();
 plt.show()
