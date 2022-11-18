@@ -79,15 +79,31 @@ def load_absorption():
 
 def plot_absorption():
     wavelength, hb02_absorption, hb_absorption = load_absorption();
+
+    current_dir = os.getcwd();
+    
+    file_name = 'absorption_hemoglobin.png'
+    dst_folder = current_dir + '\\results\\';
+    scr_folder = current_dir + '\\';
+
     plt.figure(figsize=(5,5));
-    plt.semilogy(wavelength, hb02_absorption, '.r', label='Hb02');
-    plt.semilogy(wavelength, hb_absorption, '.b', label='Hb');
-    plt.title('Curva espectral de oxi e desoxihemoglobina');
-    plt.xlabel('Comprimento de onda (nm)');
-    plt.ylabel('Absorbância')
+    plt.semilogy(wavelength, hb02_absorption, 'r', label='HbO$_2$');
+    plt.semilogy(wavelength, hb_absorption, 'b', label='Hb');
+    plt.title('Curva espectral de oxi e desoxiemoglobina');
+    plt.xlabel('Comprimento de onda [nm]');
+    plt.ylabel('Absorbância [cm$^{-1}$/M]')
     plt.legend();
+    plt.savefig(file_name);
     plt.show();
 
+    if os.path.exists(dst_folder + file_name):
+        path = dst_folder + file_name;
+        os.remove(path)
+        shutil.move(scr_folder + file_name, dst_folder + file_name)
+    else:
+        shutil.move(scr_folder + file_name, dst_folder + file_name)
+
+    
 
 def oxigination_plot(img, ref, wl_points):
     wl, hb02_absorption, hb_absorption = load_absorption();
