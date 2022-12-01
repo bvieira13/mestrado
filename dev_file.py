@@ -5,6 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import os
 import imfun as im
+import shutil
 # %%
 # Definição de funções genéricas
 def show_img(img, cmap='gray'):
@@ -30,12 +31,15 @@ def load_absorption():
 
 # %% 
 # Varáveis de definição do diretório e pasta dos quais serão extraidos os dados
-# root_path = 'C:\\Users\\Bruno Vieira\\Documents\\Mestrado\\'
-root_path = 'D:\\Documents\\Graduate\\Master\\Research\\Results\\'
-dir = 'dataset\\Hemoglobina\\Camundongo Melanoma Erika\\2022.10.03 - Camundongo\\'
-folder = 'CVerd01\\FA'
+root_path = 'C:\\Users\\Bruno Vieira\\Documents\\Mestrado\\Code\\'
+# root_path = 'D:\\Documents\\Graduate\\Master\\Research\\Results\\'
+common = 'dataset\\Hemoglobin\\'
+type = 'Nude Mouse Melanoma\\'
+date = '2022.10.03\\'
+specimen = 'green-induced-04\\'
+flank = 'affect'
 
-data_path = root_path + dir + folder 
+data_path = root_path + common + type + date + specimen + flank
 # Carregando os nomes dos arquivos presentes na pasta selecionada
 names = os.listdir(data_path)
 names.reverse()
@@ -85,7 +89,24 @@ wl_array = list(wl)
 so2 = (hb_absorption[wl_array.index(isosbestic)] - hb_absorption[wl_array.index(non_isosbestic)]*np.divide(img_norm[wavelength.index(non_isosbestic)], 
             img_norm[wavelength.index(isosbestic)]))/(hb_absorption[wl_array.index(isosbestic)] - hb02_absorption[wl_array.index(isosbestic)]);
 
+current_dir = os.getcwd();
+
+file_name = 'so2-green-induced-04-day-5.png'
+dst_folder = current_dir + '\\results\\';
+scr_folder = current_dir + '\\';
+
 plt.figure(figsize=(5,5));
-plt.imshow(so2, cmap= 'RdGy_r', vmin = 0, vmax= 25);
+plt.imshow(so2, cmap= 'RdGy_r', vmin = 0, vmax= 30);
+plt.title('Dia 5');
 plt.colorbar();
+plt.savefig(file_name);
 plt.show()
+
+if os.path.exists(dst_folder + file_name):
+    path = dst_folder + file_name;
+    os.remove(path)
+    shutil.move(scr_folder + file_name, dst_folder + file_name)
+else:
+    shutil.move(scr_folder + file_name, dst_folder + file_name)
+
+

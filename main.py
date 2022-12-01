@@ -89,9 +89,9 @@ def plot_absorption():
     plt.figure(figsize=(5,5));
     plt.semilogy(wavelength, hb02_absorption, 'r', label='HbO$_2$');
     plt.semilogy(wavelength, hb_absorption, 'b', label='Hb');
-    plt.title('Curva espectral de oxi e desoxiemoglobina');
     plt.xlabel('Comprimento de onda [nm]');
-    plt.ylabel('Absorbância [cm$^{-1}$/M]')
+    plt.ylabel('Absorbância [cm$^{-1}$/M]');
+    plt.axis([400, 1000, 1e2, 1e6]);
     plt.legend();
     plt.savefig(file_name);
     plt.show();
