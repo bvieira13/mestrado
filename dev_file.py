@@ -95,8 +95,11 @@ file_name = 'so2-green-induced-04-day-5.png'
 dst_folder = current_dir + '\\results\\';
 scr_folder = current_dir + '\\';
 
+min = 0;
+max = 28;
+
 plt.figure(figsize=(5,5));
-plt.imshow(so2, cmap= 'RdGy_r', vmin = 0, vmax= 30);
+plt.imshow(so2, cmap = 'RdGy_r', vmin=min, vmax=max);
 plt.title('Dia 5');
 plt.colorbar();
 plt.savefig(file_name);
@@ -108,5 +111,7 @@ if os.path.exists(dst_folder + file_name):
     shutil.move(scr_folder + file_name, dst_folder + file_name)
 else:
     shutil.move(scr_folder + file_name, dst_folder + file_name)
+
+
 
 

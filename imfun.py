@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+   # -*- coding: utf-8 -*-
 """
 Imaging Processing Functions
 
@@ -16,12 +16,14 @@ import matplotlib.pyplot as plt
 from scipy import interpolate
 from scipy import stats
 # To use a 'beep' sound, uncomment: winsound, time.
-import winsound
+import winsound               # commented because it only works in windows
 import time
-from pynput import keyboard
+import ctypes
+# from pynput import keyboard   # It does not worked on colabs
+from random import shuffle
 
 
-def load_gray_images(folder, colormap = -1):
+def load_gray_images(folder,colormap):
     """Loading grayscale images from 'folder'
     
     This function load all the images from 'folder' in grayscale and store in
@@ -169,23 +171,23 @@ def beep(**kwargs):
 
 
 def rotate2D(pts, cnt, ang):
-   '''Rotating the points about a center 'cnt' by an ang 'ang' in radians.
-   
-   [pts_r] = rotate2D(pts, cnt, ang)
-   
-   '''
-   return np.dot(pts-cnt,np.array([[ np.cos(ang),np.sin(ang)],
-                                   [-np.sin(ang),np.cos(ang)]]))+cnt
+    '''Rotating the points about a center 'cnt' by an ang 'ang' in radians.
+    
+    [pts_r] = rotate2D(pts, cnt, ang)
+    
+    '''
+    return np.dot(pts-cnt,np.array([[ np.cos(ang),np.sin(ang)],
+                                    [-np.sin(ang),np.cos(ang)]]))+cnt
 
 
 
-class choose_points_t(object):
+class choose_points1(object):
     '''This is the class to help 'choose_points' function.
     '''
     def __init__(self):
         self.done = False       # True when we finish the polygon
         self.current = (0, 0)   # Current position of mouse
-        self.points = []        # The choosen vertex points
+        self.points = []        # The chosen vertex points
     
     # This function defines what happens when a mouse event take place.
     def mouse_actions(self, event, x, y, buttons, parameters):
@@ -263,14 +265,14 @@ class choose_points_t(object):
 
 def choose_points(image, **kwargs):
     '''This function return the local of chosen points.
-    [points] = choose_points(image, **cmap, **window_name, **show)
+    [image_out, points] = choose_points(image, **cmap, **window_name, **show)
     
     cmap: Chose the prefered colormap. If 'None', image in grayscale.
           Some colormap exemples: cv2.COLORMAP_PINK, cv2.COLORMAP_HSV,
           cv2.COLORMAP_PARULA, cv2.COLORMAP_JET, cv2.COLORMAP_RAINBOW, etc.
     window_name: choose a window name if you want to
     show: if True, it shows the image with the points remains printed.
-    image2: the output polygonal ROI
+    image_out: the output polygonal ROI
     points: the chosen vertices (numpy-array)
     
     left buttom: select a new vertex
@@ -281,16 +283,16 @@ def choose_points(image, **kwargs):
     to get their positions.
     
     **The files with double asteristic are optional (**kwargs).    '''   
-    choose_class = choose_points_t()
+    choose_class = choose_points1()
     
     # With 'kwargs' we can define extra arguments that the user can input.
     cmap = kwargs.get('cmap')
     window_name = kwargs.get('window_name')
     show = kwargs.get('show')
     
-    # Discovering the image type [color (img_type1 = 3) or gray (img_type1 = 4)]
+    # Discovering the image type [color (img_type1=3) or gray (img_type1=2)]
     img_type1 = len(np.shape(image))
-    if img_type1 == 3:
+    if img_type1 == 2:
         img_type = 'gray'
     else:
         img_type = 'color'
@@ -303,7 +305,7 @@ def choose_points(image, **kwargs):
         cv2.waitKey(500)    # Wait a little to user see the chosen points.
         cv2.destroyWindow(window_name)
     
-    return points
+    return image2, points
 
 
 
@@ -314,15 +316,566 @@ def flat2im(flat, height, width):
     flat: 1D array with size 'height*width'
     I: output 2D image with shape 'height' by 'width'
     '''
-    I = np.zeros((height, width))
-    for l in range(0, height):
-        I[l,:] = flat[l*width:(l+1)*width]
+    
+    # if flat have multichennels, we have to account for (e.g. RGB)
+    try: channels = np.shape(flat)[1]
+    except: channels = None
+    
+    if (channels == 1) or (channels == None):
+        I = np.zeros((height, width), np.uint8)
+        if channels == 1:
+            for l in range(0, height):
+                I[l,:] = flat[l*width:(l+1)*width, 0]
+        else:
+            for l in range(0, height):
+                I[l,:] = flat[l*width:(l+1)*width]
+    else:
+        I = np.zeros((height, width, channels), np.uint8)
+        for c in range(0, channels):
+            for l in range(0, height):
+                I[l,:,c] = flat[l*width:(l+1)*width, c]
         
     return I
 
 
 
-class polyroi_t(object):
+def im2flat(image):
+    '''
+    Parameters
+    ----------
+    image : np.array
+        A 2D or 3D numpy array (if not, the program try to convert)
+        This is a numpy image to be flatten.
+
+    Returns
+    -------
+    flat : np.array
+        A flatten array with (high*width)x1 for a 2D input, and a (high*width)xN for a N-dimensional input.
+    '''
+    image = np.asarray(image)
+    
+    if len(np.shape(image)) == 2:
+        # first we define the first part of flat (the first line of 'image')
+        flat = np.array(image[0,:])
+        # since we already saved the first line of 'image', we iterate 
+        # until all the images minus one, as follows.
+        for l in range(len(image[:,0])-1):
+            flat = np.concatenate((flat,image[l+1,:]))
+    elif len(np.shape(image)) > 2:
+        flat = []
+        for d in range(len(image[0,0,:])):
+            flat_temp = np.array(image[0,:,d])
+            for l in range(len(image[:,0,d])-1):
+                flat_temp = np.hstack((flat_temp, image[l+1,:,d]))
+            flat.append(flat_temp)
+        flat = np.asarray(flat)
+    else: print('The input \'image\' has to be at least 2D')
+        
+    return flat
+
+
+
+class im2label_class(object):
+    '''This is the class helps 'im2label' function.
+    '''
+    def __init__(self):
+        self.done = False       # True when we finish the polygon
+        self.current = (0, 0)   # Current position of mouse
+        self.points = []        # The chosen vertex points
+    
+    # This function defines what happens when a mouse event take place.
+    def mouse_actions(self, event, x, y, buttons, parameters):
+        # If polygon has already done, return from this function
+        if self.done:
+            return
+        # Update the mouse current position (to draw a 'plus symbol' in image).
+        elif event == cv2.EVENT_MOUSEMOVE:
+            self.current = (x, y)
+        # Left buttom pressed indicate a new point added to 'points' .
+        elif event == cv2.EVENT_LBUTTONDOWN:
+            self.points.append((x, y))
+        # Right buttom pressed indicate the end of the choose, so 'done = True'
+        elif event == cv2.EVENT_RBUTTONDOWN:
+            self.done = True
+    
+    # This function is to really 'run' the 'choose_points1' class:
+    def run(self, image, label, cmap, w, h, dim, img_type, color):
+        # Stating a window_name for opencv
+        window_name = 'Choose a region for label ' + str(label+1)
+        
+        # Separating if we use or not a colormap.
+        if cmap is not None:
+            image_c = cv2.applyColorMap(image, cmap)
+            cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
+            cv2.imshow(window_name, image_c)
+            cv2.waitKey(1)
+        else:
+            cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
+            image_c = image.copy()
+            cv2.imshow(window_name, image_c)
+            cv2.waitKey(1)
+        # function to make the window with name 'window_name' starts
+        # to interact with the user by mouse, acording 'self.mouse_actions'
+        cv2.setMouseCallback(window_name, self.mouse_actions)
+        
+        # Defining thickness based on image size (to lines in image)
+        if w > 500:
+            thickness = int(w/500)
+        else:
+            thickness = 1
+        
+        # loop to draw the lines while we are choosing the polygon vertices
+        while(not self.done):
+            # make a copy to draw the working line
+            # THIS COPY OF ORIGINAL IMAGE FORCE THAT ONLY ONE RECTANGLE BE
+            # DRAWN IN EACH IMAGE PLOT. Try to comment and see what happens.
+            image2 = image_c.copy()
+            # Creating the zoom in figure, we used 2*int because int(w/3) can
+            # be different from 2*int(w/6).
+            zoom_in = np.zeros([2*int(h/6), 2*int(w/6), dim], np.uint8)
+            
+            # If at least 1 point was chosen, draw the polygon and the working
+            # line. We use cv2.imshow to constantly show a new image with the
+            # vertices already drawn and the updated working line
+            if (len(self.points) > 0):
+                # Writing lines in big figure
+                cv2.polylines(image2, np.array([self.points]), False, color,
+                              thickness)
+                cv2.line(image2, self.points[-1], self.current, color,
+                         thickness)
+                if self.current[1]-int(h/6) < 0:
+                    if self.current[0]-int(w/6) < 0:
+                        zoom_in[int(h/6)-self.current[1]:,int(w/6)-self.current[0]:,:] = image2[0:self.current[1]+int(h/6),0:self.current[0]+int(w/6),:]
+                    elif self.current[0]+int(w/6) > w:
+                        zoom_in[int(h/6)-self.current[1]:,0:int(w/6)+w-self.current[0],:] = image2[0:self.current[1]+int(h/6),self.current[0]-int(w/6):w,:]
+                    else:
+                        zoom_in[int(h/6)-self.current[1]:,:,:] = image2[0:self.current[1]+int(h/6),self.current[0]-int(w/6):self.current[0]+int(w/6),:]
+                elif self.current[1]+int(h/6) > h:
+                    if self.current[0]-int(w/6) < 0:
+                        zoom_in[0:int(h/6)+h-self.current[1],int(w/6)-self.current[0]:,:] = image2[self.current[1]-int(h/6):self.current[1]+int(h/6)+int(h/6)-h+self.current[1],0:self.current[0]+int(w/6),:]
+                    elif self.current[0]+int(w/6) > w:
+                        zoom_in[0:int(h/6)+h-self.current[1],0:int(w/6)+w-self.current[0],:] = image2[self.current[1]-int(h/6):self.current[1]+int(h/6)+int(h/6)-h+self.current[1],self.current[0]-int(w/6):w,:]
+                    else:
+                        zoom_in[0:int(h/6)+h-self.current[1],:,:] = image2[self.current[1]-int(h/6):self.current[1]+int(h/6)+int(h/6)-h+self.current[1],self.current[0]-int(w/6):self.current[0]+int(w/6),:]
+                else:
+                    if self.current[0]-int(w/6) < 0:
+                        zoom_in[:,int(w/6)-self.current[0]:,:] = image2[self.current[1]-int(h/6):self.current[1]+int(h/6),0:self.current[0]+int(w/6),:]
+                    elif self.current[0]+int(w/6) > w:
+                        zoom_in[:,0:int(w/6)+w-self.current[0],:] = image2[self.current[1]-int(h/6):self.current[1]+int(h/6),self.current[0]-int(w/6):w,:]
+                    else:
+                        zoom_in[:,:,:] = image2[self.current[1]-int(h/6):self.current[1]+int(h/6),self.current[0]-int(w/6):self.current[0]+int(w/6),:]
+                
+                # Making a 'plus' signal to help choosing region
+                zoom_in[int(w/6),int(4*h/30):int(19*h/120)] = np.uint8(zoom_in[int(w/6),int(4*h/30):int(19*h/120)]+125)
+                zoom_in[int(w/6),int(21*h/120):int(6*h/30)] = np.uint8(zoom_in[int(w/6),int(21*h/120):int(6*h/30)]+125)
+                zoom_in[int(4*w/30):int(19*w/120),int(h/6)] = np.uint8(zoom_in[int(4*w/30):int(19*w/120),int(h/6)]+125)
+                zoom_in[int(21*w/120):int(6*w/30),int(h/6)] = np.uint8(zoom_in[int(21*w/120):int(6*w/30),int(h/6)]+125)
+
+                # Transforming 'zoom_in' is a zoom (it is a crop right now)
+                h_z, w_z = np.shape(zoom_in)[0],  np.shape(zoom_in)[1]
+                zoom_in = cv2.resize(zoom_in[int(h_z/2)-int(h_z/4):int(h_z)-int(h_z/4), int(w_z/2)-int(w_z/4):int(w_z)-int(w_z/4)], None, fx=2, fy=2, interpolation=cv2.INTER_NEAREST)
+                image2[0:2*int(h/6),w-2*int(w/6):w]=zoom_in
+                cv2.imshow(window_name, image2)
+            else:
+                if self.current[1]-int(h/6) < 0:
+                    if self.current[0]-int(w/6) < 0:
+                        zoom_in[int(h/6)-self.current[1]:,int(w/6)-self.current[0]:,:] = image2[0:self.current[1]+int(h/6),0:self.current[0]+int(w/6),:]
+                    elif self.current[0]+int(w/6) > w:
+                        zoom_in[int(h/6)-self.current[1]:,0:int(w/6)+w-self.current[0],:] = image2[0:self.current[1]+int(h/6),self.current[0]-int(w/6):w,:]
+                    else:
+                        zoom_in[int(h/6)-self.current[1]:,:,:] = image2[0:self.current[1]+int(h/6),self.current[0]-int(w/6):self.current[0]+int(w/6),:]
+                elif self.current[1]+int(h/6) > h:
+                    if self.current[0]-int(w/6) < 0:
+                        zoom_in[0:int(h/6)+h-self.current[1],int(w/6)-self.current[0]:,:] = image2[self.current[1]-int(h/6):self.current[1]+int(h/6)+int(h/6)-h+self.current[1],0:self.current[0]+int(w/6),:]
+                    elif self.current[0]+int(w/6) > w:
+                        zoom_in[0:int(h/6)+h-self.current[1],0:int(w/6)+w-self.current[0],:] = image2[self.current[1]-int(h/6):self.current[1]+int(h/6)+int(h/6)-h+self.current[1],self.current[0]-int(w/6):w,:]
+                    else:
+                        zoom_in[0:int(h/6)+h-self.current[1],:,:] = image2[self.current[1]-int(h/6):self.current[1]+int(h/6)+int(h/6)-h+self.current[1],self.current[0]-int(w/6):self.current[0]+int(w/6),:]
+                else:
+                    if self.current[0]-int(w/6) < 0:
+                        zoom_in[:,int(w/6)-self.current[0]:,:] = image2[self.current[1]-int(h/6):self.current[1]+int(h/6),0:self.current[0]+int(w/6),:]
+                    elif self.current[0]+int(w/6) > w:
+                        zoom_in[:,0:int(w/6)+w-self.current[0],:] = image2[self.current[1]-int(h/6):self.current[1]+int(h/6),self.current[0]-int(w/6):w,:]
+                    else:
+                        zoom_in[:,:,:] = image2[self.current[1]-int(h/6):self.current[1]+int(h/6),self.current[0]-int(w/6):self.current[0]+int(w/6),:]
+                # Making a 'plus' signal to help choosing region
+                zoom_in[int(w/6),int(4*h/30):int(19*h/120)] = np.uint8(zoom_in[int(w/6),int(4*h/30):int(19*h/120)]+125)
+                zoom_in[int(w/6),int(21*h/120):int(6*h/30)] = np.uint8(zoom_in[int(w/6),int(21*h/120):int(6*h/30)]+125)
+                zoom_in[int(4*w/30):int(19*w/120),int(h/6)] = np.uint8(zoom_in[int(4*w/30):int(19*w/120),int(h/6)]+125)
+                zoom_in[int(21*w/120):int(6*w/30),int(h/6)] = np.uint8(zoom_in[int(21*w/120):int(6*w/30),int(h/6)]+125)
+
+                # Transforming 'zoom_in' is a zoom (it is a crop right now)
+                h_z, w_z = np.shape(zoom_in)[0],  np.shape(zoom_in)[1]
+                zoom_in = cv2.resize(zoom_in[int(h_z/2)-int(h_z/4):int(h_z)-int(h_z/4), int(w_z/2)-int(w_z/4):int(w_z)-int(w_z/4)], None, fx=2, fy=2, interpolation=cv2.INTER_NEAREST)
+                image2[0:2*int(h/6),w-2*int(w/6):w]=zoom_in
+                cv2.imshow(window_name, image2)
+            k = cv2.waitKey(50) & 0xFF
+            if k == 27:
+                self.done = True
+        cv2.destroyWindow(window_name)
+        return self.points
+
+
+
+def im2label(root, classes, **kwargs):
+    '''Function to create a label image.
+    
+    im2label(folder, classes)
+    
+    root: 'string'
+        root directory where images are.
+    
+    classes: 'int'
+        the number of classes to choose.
+    
+    **open_roi: 'string'
+        If open_roi is not 'None', the algorithm choose open regions. If it is
+        'above', the chosen region will be an open region above the chosen
+        area. If it is 'below', the chosen region will be below instead.
+    **cmap: 'int' (cv2 colormap)
+    **show: 'boolean'
+        If 'show' True, show the final image and its label until user press
+        'ESC', or any key.
+    **equalize: 'boolean'
+        If 'True', equalize grayscale image histogram.
+    **gray: 'boolean'
+        If 'True', image become grayscale
+    **color: 'toople'
+        Color of line drown.
+    
+    Mouse actions:
+    - left buttom: select a new point in the label;
+    - right buttom: end selection and finish or go to another label;
+    - ESC: finish selection (close the algorithm).
+    
+    **OBS: When using 'open_roi', it is just possible to chose points from
+    left part of the image to the right.
+    OBS: The remaining unlabeled pixels will be set as the background pixels
+    (they will belong to the last label)(if a label is chosen more than once,
+    the last chosen label will be applied).
+    OBS: images can be multidimensional ([hiegth,width,dimensions])
+    
+    This function creates another folder, with the same name of root plus
+    the string " labels", containing the label images for each image in 'root'.
+    Since the label takes lot of time, this function also read if there are
+    chosen image labels.'''   
+    
+    classes = int(classes)
+    
+    # With 'kwargs' we can define extra arguments as input.
+    cmap = kwargs.get('cmap')
+    open_roi = kwargs.get('open_roi')
+    show = kwargs.get('show')
+    equalize = kwargs.get('equalize')
+    color = kwargs.get('color')
+    
+    # If no color was chosen, choose gray:
+    color = (200, 200, 200) if color==None else color
+
+    # First, we create a folder with name 'root'+ ' labels', to save results
+    os.chdir(root)
+    os.chdir('..')
+    basename = os.path.basename(os.path.normpath(root))
+    # If folder has been already created, the use of try prevent error output
+    try: os.mkdir(basename+' labels')
+    except: pass
+    os.chdir(basename+' labels')
+    # Verify if folder has some already labaled images, if yes, skip the 
+    # labeled ones
+    image_names = os.listdir(root)
+    if os.listdir(os.curdir):
+        for name in os.listdir(os.curdir):
+            if name in image_names:
+                image_names.remove(name)
+    shuffle(image_names)
+    # This for will iterate in each image in 'root' folder
+    for image_name in image_names:
+        image = cv2.imread(os.path.join(root, image_name))
+        # Discovering the image type [color or multidimensional (img_type1 = 3)
+        # or gray (img_type1 = 2)]
+        img_type1 = len(np.shape(image))
+        if img_type1 == 2:
+            img_type = 'gray'
+            # Equalizing histogram
+            if equalize == True:
+                cv2.equalizeHist(image, image)
+            image = image[..., np.newaxis]
+            image[:,:,1] = image[:,:,0]
+            image[:,:,2] = image[:,:,0]
+            dim = 1
+        else:
+            img_type = 'color'
+            dim = np.shape(image)[2]
+        # first the image label will be a '-1' array
+        if img_type == 'grey':
+            label_image = np.zeros(np.shape(image), int)-np.ones(np.shape(image), int)
+        else:
+            label_image = np.zeros(np.shape(image[:,:,0]), int)-np.ones(np.shape(image[:,:,0]), int)
+        # Image width and higher
+        w = np.shape(image)[1]
+        h = np.shape(image)[0]
+        # Iterate in each label (except the last one, that is background)
+        label = 0
+        while label < classes-1:
+            # The '.run' class gives the chosen points
+            im2label = im2label_class()
+            points = im2label.run(image, label, cmap, w, h, dim, img_type, color)
+            points = np.asarray(points)
+            # Creating a roi to signaling the chosen region with '1'
+            if img_type == 'gray':
+                roi = np.zeros(np.shape(image), np.int32)
+            else:
+                roi = np.zeros(np.shape(image[:,:,0]), np.int32)
+            # First we run when roi regions are closed (open_roi == None)
+            if not open_roi:
+                cv2.fillPoly(roi, [np.asarray(points)], (1, 1, 1))
+                # Then we change the 'label_image' to 'label' when roi was chosen
+                # label_image[(roi==1) & (label_image==-1)] = label
+                label_image[roi==1] = label
+                print('not openroi')
+            elif open_roi == 'above' or open_roi == 'below':
+                # If ROI is 'above', concatenate the upper image part, but
+                # if the user choose points near to the sides, concatenate
+                # the side last side points. Same to 'below'.
+                if points[0,0] > h - points[0,1]: # DOWN-X
+                    if w - points[-1,0] > h - points[-1,1]: # DOWN-DOWN
+                        points[0,1] = h
+                        points[-1,1] = h
+                        if open_roi == 'above':
+                            start_points = np.array([[w,h],[w,0],[0,0],[0,h]])
+                        elif open_roi == 'below':
+                            start_points = None
+                    elif w - points[-1,0] > points[-1,1]: # DOWN-UP
+                        points[0,1] = h
+                        points[-1,1] = 0
+                        if open_roi == 'above':
+                            start_points = np.array([[0,0],[0,h]])
+                        elif open_roi == 'below':
+                            start_points = np.array([[w,0],[w,h]])
+                    else: # DOWN-RIGHT
+                        points[0,1] = h
+                        points[-1,0] = w
+                        if open_roi == 'above':
+                            start_points = np.array([[w,0],[0,0],[0,h]])
+                        elif open_roi == 'below':
+                            start_points = np.array([[w,h]])
+                            
+                elif points[0,0] > points[0,1]: # UP-X
+                    if w - points[-1,0] > h - points[-1,1]: # UP-DOWN
+                        points[0,1] = 0
+                        points[-1,1] = h
+                        if open_roi == 'above':
+                            start_points = np.array([[w,h],[w,0]])
+                        elif open_roi == 'below':
+                            start_points = np.array([[0,h],[0,0]])
+                    elif w - points[-1,0] > points[-1,1]: # UP-UP
+                        points[0,1] = 0
+                        points[-1,1] = 0
+                        if open_roi == 'above':
+                            start_points = None
+                        elif open_roi == 'below':
+                            start_points = np.array([[w,0],[w,h],[0,h],[0,0]])
+                    else: # UP-RIGHT
+                        points[0,1] = 0
+                        points[-1,0] = w
+                        if open_roi == 'above':
+                            start_points = np.array([[w,0]])
+                        elif open_roi == 'below':
+                            start_points = np.array([[w,h],[0,h],[0,0]])
+                else: # LEFT-X
+                    if w - points[-1,0] > h - points[-1,1]: # LEFT-DOWN
+                        points[0,0] = 0
+                        points[-1,1] = h
+                        if open_roi == 'above':
+                            start_points = np.array([[w,h],[w,0],[0,0]])
+                        elif open_roi == 'below':
+                            start_points = np.array([[0,h]])
+                    elif w - points[-1,0] > points[-1,1]: # LEFT-UP
+                        points[0,0] = 0
+                        points[-1,1] = 0
+                        if open_roi == 'above':
+                            start_points = np.array([[0,0]])
+                        elif open_roi == 'below':
+                            start_points = np.array([[w,0],[w,h],[0,h]])
+                    else: # LEFT-RIGHT
+                        points[0,0] = 0
+                        points[-1,0] = w
+                        if open_roi == 'above':
+                            start_points = np.array([[w,0],[0,0]])
+                        elif open_roi == 'below':
+                            start_points = np.array([[w,h],[0,h]])
+                
+                if start_points is not None:
+                    points = np.concatenate((start_points,points), axis=0)
+                cv2.fillPoly(roi, [np.asarray(points)], (1, 1, 1))
+                # Only modificate regions where 'label_image' is -1, to 
+                # not overwrite the previously chosen label (same below).
+                # label_image[(roi==1)  & (label_image==-1)] = label
+                label_image[roi==1] = label
+            else: print('\nvariable \'open_roi\' has to be \'above\' or \'below\'')
+            # Ask if the label was currectly chosen:
+            q1 = 'Was label '+str(label+1)+' correctly chosen?'
+            q2 = '\n\nCancel: Redo label selection!\n\nOk: Go to the next label..'
+            # Resposta: asw = 6 (sim), asw = 7 (não), 'Cancelar', asw = 2, 
+            asw = ctypes.windll.user32.MessageBoxW(0,q1+q2,"Pergunta", 1)
+            if asw == 1:
+                label += 1
+            
+        # Assigning the last label as background.
+        label_image[label_image==-1] = classes-1
+        label_image = np.array(label_image, np.uint8)
+        # If 'show' = True
+        if show:
+            fig, ax = plt.subplots(1,2)
+            if img_type == 'color':
+                ax[0].imshow(image[:,:,::-1])
+            ax[0].axis('off')
+            ax[1].imshow(label_image, vmax=np.max(label_image), vmin=np.min(label_image), cmap = 'viridis')
+            ax[1].axis('off')
+        # Adding final label image in 'label_images'
+        cv2.imwrite(image_name, label_image)
+    print('\nAll the images were labeled')
+
+
+
+class improfile_class(object):
+    '''This is a class to help improfile function (choose polygonal ROI)
+    
+    Read 'improfile' function for more informations.
+    '''
+    def __init__(self):
+        self.done = False       # True when we finish the polygon
+        self.current = (0, 0)   # Current position of mouse
+        self.points = []        # The chosen vertex points
+    
+    # This function defines what happens when a mouse event take place.
+    def mouse_actions(self, event, x, y, buttons, parameters):
+        # If polygon has already done, return from this function
+        if self.done:
+            return
+        # Update the mouse current position (to draw a line from last vertexn)
+        elif event == cv2.EVENT_MOUSEMOVE:
+            self.current = (x, y)
+        # Left buttom pressed indicate a new vertex, so we add this to 'points' 
+        elif event == cv2.EVENT_LBUTTONDOWN:
+            self.points.append((x, y))
+        # Right buttom pressed indicate the end of drawing, so 'done = True'
+        elif event == cv2.EVENT_RBUTTONDOWN:
+            self.done = True
+    
+    # This function is to really 'run' the polyroi function
+    def run(self, image, cmap, window_name, img_type, show):
+        # If there is no a window name chose, apply the standard one.
+        if window_name is None:
+            window_name = "Choose a polygonal ROI"
+        # Separating if we use or not a colormap.
+        if cmap is not None:
+            image_c = cv2.applyColorMap(image, cmap)
+            cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
+            cv2.imshow(window_name, image_c)
+            cv2.waitKey(1)
+        else:
+            cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
+            image_c = image.copy()
+            cv2.imshow(window_name, image_c)
+            cv2.waitKey(1)
+        # function to make the window with name 'window_name' starts
+        # to interact with the user by mouse, acording 'self.mouse_actions'
+        cv2.setMouseCallback(window_name, self.mouse_actions)
+        
+        # Defining thickness based on image size (to lines in image)
+        image2 = image_c.copy()
+        if np.shape(image2)[0] > 350:
+            thickness = int(np.shape(image_c.copy())[0]/350)
+        else:
+            thickness = 1
+        
+        # loop to draw the lines while we are choosing the polygon vertices
+        while(not self.done):
+            # make a copy to draw the working line
+            # THIS COPY OF ORIGINAL IMAGE FORCE THAT ONLY ONE RECTANGLE BE
+            # DRAWN IN EACH IMAGE PLOT. Try to comment and see what happens.
+            image2 = image_c.copy()
+            
+            # If at least 1 point was chosen, draw the polygon and the working
+            # line. We use cv2.imshow to constantly show a new image with the
+            # vertices already drawn and the updated working line
+            if (len(self.points) > 0):
+                cv2.polylines(image2, np.array([self.points]), False,
+                              (200,200,200), thickness)
+                cv2.line(image2, self.points[-1], self.current,
+                         (200,200,200), thickness)
+                cv2.imshow(window_name, image2)
+            k = cv2.waitKey(50) & 0xFF
+            if k == 27 or len(self.points) > 2:
+                self.done = True
+        
+        length = np.hypot(self.points[0][0]-self.points[1][0],
+                          self.points[0][1]-self.points[1][1])
+        X = int(np.linspace(self.points[0][0],self.points[1][0],length))
+        Y = int(np.linspace(self.points[0][1],self.points[1][1],length))
+        profile = image2[X, Y]
+        # When leaving loop, draw the polygon IF at least a point was chosen
+        if (len(self.points) > 0):
+            image3 = image.copy()
+            cv2.polylines(image3, np.array([self.points]),False,(200,200,200))
+        
+        if show is not None:
+            cv2.imshow(window_name, image3)
+        
+        return profile, self.points, window_name
+
+
+
+def improfile(image, **kwargs):
+    '''Find the profile of pixels intensity between two points in an image
+    
+    [image2, points] = improfile(image, **cmap, **window_name, **show)
+    
+    image: the input image
+    cmap: Chose the prefered colormap. If 'None', image in grayscale.
+          Some colormap exemples: cv2.COLORMAP_PINK, cv2.COLORMAP_HSV,
+          cv2.COLORMAP_PARULA, cv2.COLORMAP_JET, cv2.COLORMAP_RAINBOW, etc.
+    window_name: choose a window name if you want to
+    show: if True, it shows the image with the chosen polygon drawn
+    image2: the output polygonal ROI
+    points: the chosen vertices
+    
+    left buttom: select a new vertex
+    right buttom: finish the vertex selection
+    ESC: finish the function
+    
+    With this function it is possible to choose a polygonal ROI
+    (region of interest) using the mouse. Use the left button to 
+    choose te vertices and the right button to finish selection.
+    
+    **The arguments with double asteristic are optional (**kwargs).
+    '''
+    profileclass = improfile_class()
+    
+    # With 'kwargs' we can define extra arguments that the user can input.
+    cmap = kwargs.get('cmap')
+    window_name = kwargs.get('window_name')
+    show = kwargs.get('show')
+    
+    # Discovering the image type [color (img_type1 = 3) or gray (img_type1=2)]
+    img_type1 = len(np.shape(image))
+    if img_type1 == 2:
+        img_type = 'gray'
+    else:
+        img_type = 'color'
+    
+    # 'profileclass.run' actually run the program we need.
+    [profile, points, window_name] = profileclass.run(image, cmap,
+                                                  window_name, img_type, show)
+    cv2.waitKey(500)    # To wait a little for the user to see the chosen ROI.
+    cv2.destroyWindow(window_name)
+    
+    return profile, np.asarray(points)
+
+
+
+class polyroi1(object):
     '''This is a class to help polyroi function (choose polygonal ROI)
     
     Read 'polyroi' function for more informations.
@@ -367,18 +920,18 @@ class polyroi_t(object):
         # to interact with the user by mouse, acording 'self.mouse_actions'
         cv2.setMouseCallback(window_name, self.mouse_actions)
         
+        # Defining thickness based on image size (to lines in image)
+        if np.shape(image_c)[0] > 500:
+            thickness = int(np.shape(image_c)[0]/500)
+        else:
+            thickness = 1
+        
         # loop to draw the lines while we are choosing the polygon vertices
         while(not self.done):
             # make a copy to draw the working line
             # THIS COPY OF ORIGINAL IMAGE FORCE THAT ONLY ONE RECTANGLE BE
             # DRAWN IN EACH IMAGE PLOT. Try to comment and see what happens.
             image2 = image_c.copy()
-            
-            # Defining thickness based on image size (to lines in image)
-            if np.shape(image2)[0] > 500:
-                thickness = int(np.shape(image2)[0]/500)
-            else:
-                thickness = 1
             
             # If at least 1 point was chosen, draw the polygon and the working
             # line. We use cv2.imshow to constantly show a new image with the
@@ -430,16 +983,16 @@ def polyroi(image, **kwargs):
     
     **The arguments with double asteristic are optional (**kwargs).
     '''
-    policlass = polyroi_t()
+    policlass = polyroi1()
     
     # With 'kwargs' we can define extra arguments that the user can input.
     cmap = kwargs.get('cmap')
     window_name = kwargs.get('window_name')
     show = kwargs.get('show')
     
-    # Discovering the image type [color (img_type1 = 3) or gray (img_type1 = 4)]
+    # Discovering the image type [color (img_type1 = 3) or gray (img_type1 =2)]
     img_type1 = len(np.shape(image))
-    if img_type1 == 3:
+    if img_type1 == 2:
         img_type = 'gray'
     else:
         img_type = 'color'
@@ -454,7 +1007,7 @@ def polyroi(image, **kwargs):
 
 
 
-class crop_image_t(object):
+class crop_image1(object):
     '''This is a class to help the 'crop_image' function
     
     Read 'crop_image' for more informations.
@@ -500,15 +1053,14 @@ class crop_image_t(object):
         # to interact with the user by mouse, acording 'self.mouse_actions'
         cv2.setMouseCallback(window_name, self.mouse_actions)
         
+        # Defining thickness based on image size (to lines in image)
+        thickness = int(np.shape(image_c)[1]/500)
         
         # Loop to draw the rectangles while the user choose the final one.
         while(not self.done):
             # THIS COPY OF ORIGINAL IMAGE FORCE THAT ONLY ONE RECTANGLE BE
             # DRAWN IN EACH IMAGE PLOT. Try to comment and see what happens.
             image2 = image_c.copy()
-            
-            # Defining thickness based on image size (to lines in image)
-            thickness = int(np.shape(image2)[1]/500)
             
             # If at least 1 point was chosen, draw the working rectangle from
             # its upper-left or lower-right corner until the current mouse
@@ -562,7 +1114,7 @@ def crop_image(image, **kwargs):
         2. Right mouse click - erase the chosen points and starts the choose
         again from begening.
     '''
-    # Discovering the image type [color (img_type = 2) or gray (img_type = 3)]
+    # Discovering the image type [color (img_type = 3) or gray (img_type = 2)]
     img_type = len(np.shape(image))
     
     # Obtaining '**kwargs'
@@ -574,7 +1126,7 @@ def crop_image(image, **kwargs):
     if window_name is None:
         window_name = "Choose a region to Crop"
     # Calling class:
-    cropping_class = crop_image_t()
+    cropping_class = crop_image1()
     [points, image3] = cropping_class.run(image, cmap, window_name, img_type)
     
     # If 'show = True', show the final image, with the chosen cropping rectang.
@@ -606,7 +1158,7 @@ def crop_image(image, **kwargs):
 
 
 
-class crop_multiple_t(object):
+class crop_multiple1(object):
     
     def __init__(self):
         self.window_name = 'Choose the area to crop'    # Our window's name.
@@ -631,7 +1183,7 @@ class crop_multiple_t(object):
     # This function actually run the 'crop_multiple' function
     def run(self, image, width, height, img_type, cmap):
         if cmap is not None:
-            if img_type == 3:
+            if img_type == 2:
                 image_c = cv2.applyColorMap(image, cmap)
             else:
                 image_c = image.copy()
@@ -748,7 +1300,7 @@ def crop_multiple(images, cmap):
     # If image is a 'list' variable, we need to transform in a numpy array
     I = np.asarray(images)
     
-    # Discovering the image type [color (img_type = 3) or gray (img_type = 4)]
+    # Discovering the image type [color (img_type = 4) or gray (img_type = 3)]
     img_type = len(np.shape(images))
     
     # First image cropping uses the 'crop_image' function.
@@ -778,7 +1330,7 @@ def crop_multiple(images, cmap):
     # For loop to perform a crop in all the images in 'I'
     for n in range(1,len(I)):
         # The best practice is every time call the class before use its functi.
-        crop_class = crop_multiple_t()
+        crop_class = crop_multiple1()
         [I2[n,...], point1, point2] = crop_class.run(I[n], width, height,
                                                      img_type, cmap)
         pointA.append((min(point1[0],point2[0]), min(point1[1],point2[1])))
@@ -787,7 +1339,7 @@ def crop_multiple(images, cmap):
 
 
 
-class crop_poly_multiple_t(object):
+class crop_poly_multiple1(object):
     
     def __init__(self):
         self.window_name = 'Choose the area to crop'    # Our window's name.
@@ -975,7 +1527,7 @@ def crop_poly_multiple(images, **kwargs):
     # For loop to perform a crop in all the images in 'I'
     for n in range(1,len(I)):
         # The best practice is every time call the class before use its functi.
-        crop_class = crop_poly_multiple_t()
+        crop_class = crop_poly_multiple1()
         [Itemp, points1] = crop_class.run(I[n], points, equalize,
                                           img_type, cmap, show, window_name)
         I2.append(Itemp)
@@ -986,33 +1538,33 @@ def crop_poly_multiple(images, **kwargs):
 
 
 def imroiprop(I):
-   """Function to get properties of a ROI in a image
-   
-   [props, Imask] = imroiprop(I)
-   
-   props[0]: sum all pixel values in ROI;
-   props[1]: mean of non-zero values in ROI;
-   props[2]: std of non-zero values in ROI.
-   """
-   # First we choose a polygonal ROI:
-   [Imask, points] = polyroi(I, cmap = cv2.COLORMAP_PINK)
-   
-   # The mask poits of ROI came with "255" value, but we need the value "1".
-   Imask[Imask > 0] = 1
-   
-   # Preparing a vector to receive variables:
-   props = np.zeros(3, np.double)
-   
-   # Multiplying by mask
-   Itemp = I*Imask
-   # Integrating all the pixel values:
-   props[0] = np.sum(Itemp)
-   # Mean pixel value from ROI:
-   props[1] = Itemp[Itemp!=0].mean()
-   # Standar deviation from pixels in ROI:
-   props[2] = Itemp[Itemp!=0].std()
-   
-   return props, Imask
+    """Function to get properties of a ROI in a image
+    
+    [props, Imask] = imroiprop(I)
+    
+    props[0]: sum all pixel values in ROI;
+    props[1]: mean of non-zero values in ROI;
+    props[2]: std of non-zero values in ROI.
+    """
+    # First we choose a polygonal ROI:
+    [Imask, points] = polyroi(I, cmap = cv2.COLORMAP_PINK)
+    
+    # The mask poits of ROI came with "255" value, but we need the value "1".
+    Imask[Imask > 0] = 1
+    
+    # Preparing a vector to receive variables:
+    props = np.zeros(3, np.double)
+    
+    # Multiplying by mask
+    Itemp = I*Imask
+    # Integrating all the pixel values:
+    props[0] = np.sum(Itemp)
+    # Mean pixel value from ROI:
+    props[1] = Itemp[Itemp!=0].mean()
+    # Standar deviation from pixels in ROI:
+    props[2] = Itemp[Itemp!=0].std()
+    
+    return props, Imask
 
 
 
@@ -1069,7 +1621,7 @@ def imchoose(images, cmap):
                                      on_release=on_release)
         listener.start() 
         # The 'plt.pause' allow the 'pyplot' have time to show the image.
-        plt.pause(.05) # waiting few miliseconds.
+        plt.pause(2) # waiting few miliseconds.
         # If user press 'esc' or 'enter', the program closes
         try:
             # If user press 'enter' or 'esc', the program ends.
@@ -1098,7 +1650,7 @@ def imchoose(images, cmap):
                             ax[n].axis('off')
                     plt.subplots_adjust(top=0.976,bottom=0.024,left=0.015,
                                         right=0.985,hspace=0.0,wspace=0.046)
-                    plt.pause(.05)
+                    plt.pause(2)
         except: pass
     plt.close(fig)
     return np.array(chosen,np.int)
@@ -1345,7 +1897,7 @@ def isoareas(folder, numb, **kwargs):
     
     # If the user doesn't enter with a pixel_size value, make 'pixel_size=1'.
     if pixel_size == None:
-       pixel_size = 1
+        pixel_size = 1
     
     # Creating empty lists for fluorecence ('F') and output images ('Iout').
     F = []
@@ -1430,28 +1982,28 @@ def isoareas(folder, numb, **kwargs):
         
         # Here we find the isolines between the borders.
         for n in range(0,numb-1):
-           isolines[:,2+n*2] = points1b[:,0]
-           isolines[:,3+n*2] = points1b[:,1]+(n+1)*((points2b[:,1]-points1b[:,1])/numb)
+            isolines[:,2+n*2] = points1b[:,0]
+            isolines[:,3+n*2] = points1b[:,1]+(n+1)*((points2b[:,1]-points1b[:,1])/numb)
         
         # Plotting the isolines
         plt.subplots()
         plt.title('isolines[:,0+n*2], isolines[:,1+n*2]')
         for n in range(0,numb+1):
-           plt.plot(isolines[:,0+n*2], isolines[:,1+n*2], linewidth = 3, color = "white")
+            plt.plot(isolines[:,0+n*2], isolines[:,1+n*2], linewidth = 3, color = "white")
         plt.show
         
         # Changing, again, 'x' with 'y' to plot the isolines in the figure.
         isolines2 = np.zeros([np.int(abs(points1a[-1,0]-points1a[0,0])/div),
                              2*numb+2], np.double)
         for n in range(0,numb+1):
-           isolines2[:,0+n*2] = isolines[:,1+n*2]
-           isolines2[:,1+n*2] = isolines[:,0+n*2]
+            isolines2[:,0+n*2] = isolines[:,1+n*2]
+            isolines2[:,1+n*2] = isolines[:,0+n*2]
         
         # Plotting the isolines
         plt.subplots()
         plt.title('isolines2[:,0+n*2], isolines2[:,1+n*2]')
         for n in range(0,numb+1):
-           plt.plot(isolines2[:,0+n*2], isolines2[:,1+n*2], linewidth = 3, color = "white")
+            plt.plot(isolines2[:,0+n*2], isolines2[:,1+n*2], linewidth = 3, color = "white")
         plt.show
         
         # The next steps create the images with the ROIs of isolines. 'I4' is
@@ -1461,24 +2013,24 @@ def isoareas(folder, numb, **kwargs):
         # Defining the variable that will help us to "paint" the image 'I4'.
         factor = np.round(250/numb)
         if factor > 10:
-           factor = 10
+            factor = 10
         # This two "for's" is actually to create the images.
         Itemp1 = np.zeros([np.shape(I1)[0],np.shape(I1)[1]], np.uint8)
         for n in range(0,numb):
-           pts_temp = np.concatenate((isolines2[:,0+n*2:2+n*2],
-                                      isolines2[::-1,2+n*2:4+n*2]))
-           pts_temp = np.matrix.round(pts_temp)
-           pts_temp = np.array(pts_temp, np.int)
-           cv2.fillPoly(Itemp1, [pts_temp],
-                        (factor*(n+1),factor*(n+1),factor*(n+1)))
+            pts_temp = np.concatenate((isolines2[:,0+n*2:2+n*2],
+                                       isolines2[::-1,2+n*2:4+n*2]))
+            pts_temp = np.matrix.round(pts_temp)
+            pts_temp = np.array(pts_temp, np.int)
+            cv2.fillPoly(Itemp1, [pts_temp],
+                         (factor*(n+1),factor*(n+1),factor*(n+1)))
         for n in range(0,numb):
-           Itemp2 = np.zeros([np.shape(I1)[0],np.shape(I1)[1]], np.uint8)
-           pts_temp = np.concatenate((isolines2[:,0+n*2:2+n*2],
-                                      isolines2[::-1,2+n*2:4+n*2]))
-           pts_temp = np.matrix.round(pts_temp)
-           pts_temp = np.array(pts_temp, np.int)
-           cv2.fillPoly(Itemp2, [pts_temp], (1,1,1))
-           I5.append(Itemp2)
+            Itemp2 = np.zeros([np.shape(I1)[0],np.shape(I1)[1]], np.uint8)
+            pts_temp = np.concatenate((isolines2[:,0+n*2:2+n*2],
+                                       isolines2[::-1,2+n*2:4+n*2]))
+            pts_temp = np.matrix.round(pts_temp)
+            pts_temp = np.array(pts_temp, np.int)
+            cv2.fillPoly(Itemp2, [pts_temp], (1,1,1))
+            I5.append(Itemp2)
         
         # Transforming 'I4' and 'I5' from list to 'numpy array'.
         I4 = I1.copy() + ((0.25*np.max(I1))/np.max(Itemp1))*Itemp1
@@ -1493,8 +2045,8 @@ def isoareas(folder, numb, **kwargs):
         
         im, ax = plt.subplots(1,numb)
         for n in range(0,numb):
-           ax[n].imshow(I5[n])
-           ax[n].axis('off')
+            ax[n].imshow(I5[n])
+            ax[n].axis('off')
         plt.title('Plotting all I5 images')
         
         # Chosing the region where fluorescence will be calculated (fluorescen-
@@ -1522,43 +2074,43 @@ def isoareas(folder, numb, **kwargs):
         vect1 = []
         vect2 = []
         for n in range(0,len(I5)):
-           Itemp1 = np.zeros((np.shape(I1)), np.uint8)
-           Itemp2 = np.zeros((np.shape(I1)), np.uint8)
-           Itemp1 = I1*I5[n]
-           Itemp2 = I1*I5[n]*Imask
-        
-           # Now we define a line pointing the direction of the 'depth', and 
-           # see when this line intercept I1*I5*Imask.
-           line = np.zeros((int(len(I1[0,:])/0.1),2), np.double)
-           line[:,0] = np.arange(0,len(I1[0,:]),0.1)
-           vector1 = []    # Pixels that belong to 'line' and to 'I5*Imask'
-           vector2 = []    # Pixels that belong to 'line' and to 'I5*Imask
-           for k in range(0,int(len(I1[:,0]))):
-              line[:,1] = coefficients[0]*line[:,0] + k
-              Itemp = np.zeros((np.shape(I1)), np.uint8)
-              # Defining the points to draw.
-              points5 = np.asarray(np.round((line[0,:],line[-1,:])), np.int)
-              cv2.polylines(Itemp, [points5], False,(1,1,1),1)
-              value1 = np.count_nonzero(Itemp*Itemp1)
-              value2 = np.count_nonzero(Itemp*Itemp2)
-              if value1 > 0:             # If it is true, 'line' intercept I1*I5.
-                 if value1 == value2:    # If it is true, 'line' intercept I1*I5*Imask.
-                    vector1.append(value2)
+            Itemp1 = np.zeros((np.shape(I1)), np.uint8)
+            Itemp2 = np.zeros((np.shape(I1)), np.uint8)
+            Itemp1 = I1*I5[n]
+            Itemp2 = I1*I5[n]*Imask
+         
+            # Now we define a line pointing the direction of the 'depth', and 
+            # see when this line intercept I1*I5*Imask.
+            line = np.zeros((int(len(I1[0,:])/0.1),2), np.double)
+            line[:,0] = np.arange(0,len(I1[0,:]),0.1)
+            vector1 = []    # Pixels that belong to 'line' and to 'I5*Imask'
+            vector2 = []    # Pixels that belong to 'line' and to 'I5*Imask
+            for k in range(0,int(len(I1[:,0]))):
+                line[:,1] = coefficients[0]*line[:,0] + k
+                Itemp = np.zeros((np.shape(I1)), np.uint8)
+                # Defining the points to draw.
+                points5 = np.asarray(np.round((line[0,:],line[-1,:])), np.int)
+                cv2.polylines(Itemp, [points5], False,(1,1,1),1)
+                value1 = np.count_nonzero(Itemp*Itemp1)
+                value2 = np.count_nonzero(Itemp*Itemp2)
+                if value1 > 0:             # If it is true, 'line' intercept I1*I5.
+                    if value1 == value2:    # If it is true, 'line' intercept I1*I5*Imask.
+                        vector1.append(value2)
+                        vector2.append(0)
+                    elif value1 > value2 and value2 > 0: # If true, 'line' intercept 
+                        vector1.append(0)             # I1*I5*Imask, but not in all the
+                        vector2.append(value2)        # pixels belonging to I1*I5
+                    elif value1 > value2 and value2 == 0:
+                        vector1.append(0)           # If true, 'line'
+                        vector2.append(0)           # does not intercept nothing.
+                else:
+                    vector1.append(0)
                     vector2.append(0)
-                 elif value1 > value2 and value2 > 0: # If true, 'line' intercept 
-                    vector1.append(0)             # I1*I5*Imask, but not in all the
-                    vector2.append(value2)        # pixels belonging to I1*I5
-                 elif value1 > value2 and value2 == 0:
-                    vector1.append(0)           # If true, 'line'
-                    vector2.append(0)           # does not intercept nothing.
-              else:
-                 vector1.append(0)
-                 vector2.append(0)
            
-           vector1 = np.asarray(vector1)
-           vector2 = np.asarray(vector2)
-           vect1.append(vector1)
-           vect2.append(vector2)
+            vector1 = np.asarray(vector1)
+            vector2 = np.asarray(vector2)
+            vect1.append(vector1)
+            vect2.append(vector2)
         
         vect1 = np.asarray(vect1)
         vect2 = np.asarray(vect2)
@@ -1566,10 +2118,10 @@ def isoareas(folder, numb, **kwargs):
         # The next lines is to find the mean of distance between isoareas:
         mean1 = []
         for n in range(0,len(vect1[:,0])):
-           sum_temp = vect1[n,:].sum()
-           num_temp = np.count_nonzero(vect1[n,:])
-           mean_temp = sum_temp/num_temp
-           mean1.append(mean_temp)
+            sum_temp = vect1[n,:].sum()
+            num_temp = np.count_nonzero(vect1[n,:])
+            mean_temp = sum_temp/num_temp
+            mean1.append(mean_temp)
         mean2 = np.mean(np.array(mean1))
         # Finally, defining the mean width, in 'meters' for each isoarea. The
         # term 'np.sqrt((1+coef[0]**2))' means that when we have diagonal
@@ -1577,31 +2129,31 @@ def isoareas(folder, numb, **kwargs):
         width = np.sqrt((1+coefficients[0]**2))*pixel_size*mean2
         plt.subplots()
         for n in range(0,len(vect1[:,0])):
-           plt.plot(vect1[n,:])
-#           plt.plot(vect2[n,:])
+            plt.plot(vect1[n,:])
+#            plt.plot(vect2[n,:])
         
         # Calculating fluorescence.
         Iout0 = []
         F0 = np.zeros([numb,5], np.double)
         for n in range(0,numb):
-           Itemp = I1*I5[n]*Imask
-           Iout0.append(Itemp)
-           F0[n,0] = n*width + width/2
-           F0[n,1] = Itemp[Itemp!=0].mean()
-           F0[n,2] = Itemp[Itemp!=0].std()
-           F0[n,3] = stats.mode(Itemp[Itemp!=0], axis = None)[0]
-           F0[n,4] = np.median(Itemp[Itemp!=0])
+            Itemp = I1*I5[n]*Imask
+            Iout0.append(Itemp)
+            F0[n,0] = n*width + width/2
+            F0[n,1] = Itemp[Itemp!=0].mean()
+            F0[n,2] = Itemp[Itemp!=0].std()
+            F0[n,3] = stats.mode(Itemp[Itemp!=0], axis = None)[0]
+            F0[n,4] = np.median(Itemp[Itemp!=0])
         F.append(F0)
         Iout0 = np.asarray(Iout0)
         Iout.append(Iout0)
         
         # If we need a beep:
         if beep == True:
-           frequency = 2500  # Set Frequency To 2500 Hertz
-           duration = 300    # Set Duration To 1000 ms == 1 second
-           for n in range(0,3):
-#              time.sleep(0.0005)
-              winsound.Beep(frequency, duration)
+            frequency = 2500  # Set Frequency To 2500 Hertz
+            duration = 300    # Set Duration To 1000 ms == 1 second
+            for n in range(0,3):
+#                time.sleep(0.0005)
+                winsound.Beep(frequency, duration)
         
     F = np.asarray(F)
     
@@ -1609,16 +2161,16 @@ def isoareas(folder, numb, **kwargs):
     # depth (being depth = F[n][:,m]), we define 'Fi', the interpolated 'F'.
     Fi = []
     for n in range(0,len(F)):
-       # To know the number of points we do the next lines:
-       pixel_width = 0.83e-6
-       number_temp = np.int((F[n][-1,0] - F[n][0,0])/pixel_width)
-       Fi_temp = np.zeros([number_temp, 2], np.double)
-       Fi_temp[:,0] = np.arange(F[n][0,0], F[n][0,0]+number_temp*pixel_width,
-                                pixel_width)
-       # Defining the function with 'interp1d'.
-       function_Fi = interpolate.interp1d(F[n][:,0], F[n][:,1])
-       Fi_temp[:,1] = function_Fi(Fi_temp[:,0])
-       Fi.append(Fi_temp)
+        # To know the number of points we do the next lines:
+        pixel_width = 0.83e-6
+        number_temp = np.int((F[n][-1,0] - F[n][0,0])/pixel_width)
+        Fi_temp = np.zeros([number_temp, 2], np.double)
+        Fi_temp[:,0] = np.arange(F[n][0,0], F[n][0,0]+number_temp*pixel_width,
+                                 pixel_width)
+        # Defining the function with 'interp1d'.
+        function_Fi = interpolate.interp1d(F[n][:,0], F[n][:,1])
+        Fi_temp[:,1] = function_Fi(Fi_temp[:,0])
+        Fi.append(Fi_temp)
     
     
     # To save all the data, we first enter in the folder where te images are.
