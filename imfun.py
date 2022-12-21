@@ -19,7 +19,7 @@ from scipy import stats
 import winsound               # commented because it only works in windows
 import time
 import ctypes
-# from pynput import keyboard   # It does not worked on colabs
+from pynput import keyboard   # It does not worked on colabs
 from random import shuffle
 
 
