@@ -812,8 +812,9 @@ class improfile_class(object):
         
         length = np.hypot(self.points[0][0]-self.points[1][0],
                           self.points[0][1]-self.points[1][1])
-        X = int(np.linspace(self.points[0][0],self.points[1][0],length))
-        Y = int(np.linspace(self.points[0][1],self.points[1][1],length))
+        length = int(length)
+        X = np.int0(np.linspace(self.points[0][0],self.points[1][0],length))
+        Y = np.int0(np.linspace(self.points[0][1],self.points[1][1],length))
         profile = image2[X, Y]
         # When leaving loop, draw the polygon IF at least a point was chosen
         if (len(self.points) > 0):

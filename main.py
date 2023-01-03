@@ -78,39 +78,27 @@ def load_absorption():
     return wavelength, hb02_absorption, hb_absorption
 
 def plot_absorption():
-    wavelength, hb02_absorption, hb_absorption = load_absorption();
+    wavelength, hb02_m_ext, hb_m_ext = load_absorption();
 
     current_dir = os.getcwd();
     
-    # file_name = 'absorption_hemoglobin.png'
-    file_name = 'absorption_hemoglobin_diff.png'
+    file_name = 'absorption_hemoglobin.png'
     
     dst_folder = current_dir + '\\results\\';
     scr_folder = current_dir + '\\';
 
-    hb_diff = hb_absorption - hb02_absorption
-    hb_ratio = hb_absorption/hb02_absorption
+    hb02_absorption = hb02_m_ext
+    hb_absorption = hb_m_ext   
 
-    data_file = open("diff_absorption.txt", "w")
-
-    for i in range(wavelength.size):
-        data_file.write(str(math.trunc(wavelength[i])));
-        data_file.write("\t");
-        data_file.write(str(round(hb_diff[i],2)));
-        data_file.write("\t");
-        data_file.write(str(round(hb_ratio[i],2)));
-        data_file.write("\n");
-
+    plt.rcParams['font.size'] = 16
     
-    plt.figure(figsize=(5,5));
-    plt.plot(wavelength, hb_diff, 'r', label='Diferença');
-    # plt.semilogy(wavelength, hb02_absorption, 'r', label='HbO$_2$');
-    # plt.semilogy(wavelength, hb_absorption, 'b', label='Hb');
+    plt.figure(figsize=(8,8));
+    plt.semilogy(wavelength, hb02_absorption, 'r', label='HbO$_2$');
+    plt.semilogy(wavelength, hb_absorption, 'b', label='Hb');
     plt.xlabel('Comprimento de onda [nm]');
-    # plt.ylabel('Absorbância [cm$^{-1}$/M]');
-    plt.ylabel('Diferença entre Absorbâncias [cm$^{-1}$/M]');
-    # plt.axis([400, 1000, 1e2, 1e6]);
-    # plt.legend();
+    plt.ylabel('Coeficiente de extinção molar [cm$^{-1}$/M]');
+    plt.axis([400, 1000, 1e2, 1e6]);
+    plt.legend();
     plt.savefig(file_name);
     plt.show();
 
@@ -120,7 +108,6 @@ def plot_absorption():
         shutil.move(scr_folder + file_name, dst_folder + file_name)
     else:
         shutil.move(scr_folder + file_name, dst_folder + file_name)
-    data_file.close();
     
 
 def oxigination_plot(img, ref, wl_points):
