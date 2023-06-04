@@ -140,9 +140,10 @@ class saturation_t:
             so2 = []
             for point in points:
                 (isosbestic, non_isosbestic) = point
-                numerator = (hb_absorption[wl_array.index(non_isosbestic)] - hb_absorption[wl_array.index(isosbestic)]*np.divide(img_norm[wavelength.index(isosbestic)],img_norm[wavelength.index(non_isosbestic)]))
+                numerator = (hb_absorption[wl_array.index(non_isosbestic)] - hb_absorption[wl_array.index(isosbestic)]*np.divide(np.log10(img_norm[wavelength.index(non_isosbestic)]),np.log10(img_norm[wavelength.index(isosbestic)])))
                 denominator = (hb_absorption[wl_array.index(non_isosbestic)] - hb02_absorption[wl_array.index(non_isosbestic)])
                 temp = np.abs(np.divide(numerator,denominator))*100
+                temp[temp>100] = 100
                 so2.append(temp)
             
             self.so2_norm = []
@@ -155,10 +156,10 @@ class saturation_t:
             numerator = (hb_absorption[wl_array.index(non_isosbestic)] - hb_absorption[wl_array.index(isosbestic)]*np.divide(img_norm[wavelength.index(isosbestic)],img_norm[wavelength.index(non_isosbestic)]))
             denominator = (hb_absorption[wl_array.index(non_isosbestic)] - hb02_absorption[wl_array.index(non_isosbestic)])
             so2 = np.abs(np.divide(numerator,denominator))
+            so2[so2>4.9] = 5
             temp = cv.normalize(so2, None, 1, 0, cv.NORM_MINMAX, cv.CV_32F)
             self.so2_norm = temp
                 
-
         return so2
 
 # Gera o mapa com o padrão de saturação de oxigenação a partir de 
@@ -190,7 +191,7 @@ class saturation_t:
         range = [(0,875)]
         inf_const = '-' + model.specimen + '-' + model.stage
         mid_const = '-nonisos'
-
+        N = 50
         self.load_hsi(model)
         self.extract_wavelenght_from_name(model.stage)
         hsi_mean, std = self.rectangle_roi_mean(self.hsi, self.wavelenght.index(530))
@@ -201,19 +202,22 @@ class saturation_t:
         # self.title = '$\lambda_1$ =' + str(wavelength[1]) + ' nm e $\lambda_2$ = ' + str(wavelength[0]) + ' nm'
         self.title = ''
 
-        self.plot_so2_map(so2,range[0])
+        self.plot_so2_map(self.so2_norm,range[0])
         self.replace_equal_file('hand\\final')
         temp = cv.normalize(so2, None, 255, 0, cv.NORM_MINMAX, cv.CV_8U)
         img, point = im.improfile(temp, cmap= cv.COLORMAP_HSV)
         perfil = (np.sum(img,axis=1) - 255)/255
-        perfil[perfil>1] = 1
+        perfil[perfil>=1] = np.mean(perfil)
+        x = np.convolve(perfil, np.ones(N)/N, mode='valid')
+        perfil = 1 - x   
         so2_norm = temp
 
         vessel_mean, vessel_std = self.rectangle_roi_mean(so2_norm)
         vessel_mean /= 255
         vessel_std /= 255
-
-        return so2_norm, perfil[100:280], vessel_mean, vessel_std
+        mean = 1 - vessel_mean
+        std = vessel_std
+        return so2_norm, perfil, mean, std
         
 
 
@@ -225,29 +229,37 @@ class saturation_t:
         mid_const = '-nonisos'
         inf_const = '-day-'
         i = 0
-        j = 0
+
+        so2_norm = []
+        perfil = []
+        mean = []
+        std = []
+        N = 20
         for date in dates:
             model.date = date
             self.load_hsi(model)
             self.extract_wavelenght_from_name('cam_')
-            hsi_mean = self.rectangle_roi_mean(self.hsi, self.wavelenght.index(530))
+            hsi_mean, dummy = self.rectangle_roi_mean(self.hsi, self.wavelenght.index(530))
             self.normalize(hsi_mean)
             so2 = self.so2_map(wavelength)
-            for points in wavelength:
-                self.filename =  sup_const + str(points[0]) + mid_const + str(points[1]) + inf_const + day_index[i] + '.png'
-                self.title = 'Dia ' + day_index[i] + ' ($\lambda_1$ =' + str(points[1]) + ' nm e $\lambda_2$ = ' + str(points[0]) + ' nm)'
-                self.plot_so2_map(so2[j])
-                self.replace_equal_file('mouse\\final')
-                # temp = cv.normalize(so2[j], None, 255, 0, cv.NORM_MINMAX, cv.CV_8U)
-                # img, point = im.improfile(temp, cmap= cv.COLORMAP_HSV)
-                # value = np.sum(img,axis=1) - 255
-                
-                # plt.figure(figsize=(5,5))
-                # plt.plot(value)
-                # plt.show()
-                j+=1
+
+            self.filename =  sup_const + str(wavelength[0][0]) + mid_const + str(wavelength[0][1]) + inf_const + day_index[i] + '.png'
+            self.title = 'Dia ' + day_index[i] + ' ($\lambda_1$ =' + str(wavelength[0][1]) + ' nm e $\lambda_2$ = ' + str(wavelength[0][0]) + ' nm)'
+            self.plot_so2_map(so2)
+            self.replace_equal_file('mouse\\final')
+            temp = cv.normalize(so2, None, 255, 0, cv.NORM_MINMAX, cv.CV_8U)
+            so2_norm.append(temp)
+            img, point = im.improfile(temp, cmap= cv.COLORMAP_HSV)
+            value = (np.sum(img,axis=1) - 255)/255
+            value[value>1] = np.mean(value)    
+            t_mean, t_std = self.rectangle_roi_mean(temp)
+            x = np.convolve(value, np.ones(N)/N, mode='valid')
+            perfil.append(x)
+            mean.append(1 - t_mean/255)
+            std.append(t_std/255)
             i+=1
-            j=0
+
+        return so2_norm, perfil, mean, std
 
 
 
@@ -259,99 +271,343 @@ def main():
     data = saturation_t(path)
     model = model_t()
 
-    # model.type = 'Nude Mouse Melanoma'
-    # model.specimen = 'green-induced-01'
-    # model.stage = 'affect'
+    model.type = 'Nude Mouse Melanoma'
+    model.specimen = 'green-induced-04'
+    model.stage = 'affect'
 
     # isos_wl = [(452,540), (584,562)]
+    isos_wl = [(452,540)]
+
+    g1_so2, g1_perfil, g1_mean, g1_std = data.save_mice_fig(model, isos_wl)
+    g1_so2_c = np.subtract(255, g1_so2)
+    
+    # model.specimen = 'green-induced-02'
+
+    # g2_so2, g2_perfil, g2_mean, g2_std = data.save_mice_fig(model, isos_wl)
+    # g2_so2_c = np.subtract(255, g2_so2)
+
+    # model.specimen = 'green-induced-03'
+
+    # g3_so2, g3_perfil, g3_mean, g3_std = data.save_mice_fig(model, isos_wl)
+    # g3_so2_c = np.subtract(255, g3_so2)
+    
+    # model.specimen = 'green-induced-04'
+
+    # g4_so2, g4_perfil, g4_mean, g4_std = data.save_mice_fig(model, isos_wl)
+    # g4_so2_c = np.subtract(255, g4_so2)
 
 
-    # data.save_mice_fig(model, isos_wl)
+    # plt.rcParams['font.size'] = 12
+    # vmin_oxi0 = vmin_oxi1 = vmin_oxi2 = 0.0
+    # vmax_oxi0 = vmax_oxi1 = vmax_oxi2 = 0.5
+    # vmin_deox0 = vmin_deox1 = vmin_deox2 = 0.5
+    # vmax_deox0 = vmax_deox1 = vmax_deox2 = 1.00
+    
+    # fig, ax = plt.subplots(2,3)
+    # fig.set_figwidth(10)
+    # fig.set_figheight(8)
+    # img = ax[0,0].imshow((g1_so2[0]-np.min(g1_so2[0]))/np.max(g1_so2[0]-np.min(g1_so2[0])),vmin=vmin_oxi0,vmax=vmax_oxi0,cmap = 'RdGy_r')
+    # ax[0,0].axis('off')
+    # divider = make_axes_locatable(ax[0,0])
+    # ax_cb = divider.append_axes('right', size='5%', pad=0.1)
+    # plt.colorbar(img, cax=ax_cb)
+    # img = ax[1,0].imshow((g1_so2_c[0]-np.min(g1_so2_c[0]))/np.max(g1_so2_c[0]-np.min(g1_so2_c[0])),vmin=vmin_deox0,vmax=vmax_deox0,cmap = 'RdGy_r')
+    # ax[1,0].axis('off')
+    # divider = make_axes_locatable(ax[1,0])
+    # ax_cb = divider.append_axes('right', size='5%', pad=0.1)
+    # plt.colorbar(img, cax=ax_cb)
+    # img = ax[0,1].imshow((g1_so2[1]-np.min(g1_so2[0]))/np.max(g1_so2[0]-np.min(g1_so2[0])),vmin=vmin_oxi1,vmax=vmax_oxi1,cmap = 'RdGy_r')
+    # ax[0,1].axis('off')
+    # divider = make_axes_locatable(ax[0,1])
+    # ax_cb = divider.append_axes('right', size='5%', pad=0.1)
+    # plt.colorbar(img, cax=ax_cb)
+    # img = ax[1,1].imshow((g1_so2_c[1]-np.min(g1_so2_c[0]))/np.max(g1_so2_c[0]-np.min(g1_so2_c[0])),vmin=vmin_deox1,vmax=vmax_deox1,cmap = 'RdGy_r')
+    # ax[1,1].axis('off')
+    # divider = make_axes_locatable(ax[1,1])
+    # ax_cb = divider.append_axes('right', size='5%', pad=0.1)
+    # plt.colorbar(img, cax=ax_cb)
+    # img = ax[0,2].imshow((g1_so2[2]-np.min(g1_so2[2]))/np.max(g1_so2[2]-np.min(g1_so2[2])),vmin=vmin_oxi2,vmax=vmax_oxi2,cmap = 'RdGy_r')
+    # ax[0,2].axis('off')
+    # divider = make_axes_locatable(ax[0,2])
+    # ax_cb = divider.append_axes('right', size='5%', pad=0.1)
+    # plt.colorbar(img, cax=ax_cb)
+    # img = ax[1,2].imshow((g1_so2_c[2]-np.min(g1_so2_c[2]))/np.max(g1_so2_c[2]-np.min(g1_so2_c[2])),vmin=vmin_deox2,vmax=vmax_deox2,cmap = 'RdGy_r')
+    # ax[1,2].axis('off')
+    # divider = make_axes_locatable(ax[1,2])
+    # ax_cb = divider.append_axes('right', size='5%', pad=0.1)
+    # plt.colorbar(img, cax=ax_cb)
+    # plt.tight_layout()
+    # plt.tight_layout()
+    # plt.show()
+
+    # fig, ax = plt.subplots(2,3)
+    # fig.set_figwidth(10)
+    # fig.set_figheight(8)
+    # img = ax[0,0].imshow((g2_so2[0]-np.min(g2_so2[0]))/np.max(g2_so2[0]-np.min(g2_so2[0])),vmin=vmin_oxi0,vmax=vmax_oxi0,cmap = 'RdGy_r')
+    # ax[0,0].axis('off')
+    # divider = make_axes_locatable(ax[0,0])
+    # ax_cb = divider.append_axes('right', size='5%', pad=0.1)
+    # plt.colorbar(img, cax=ax_cb)
+    # img = ax[1,0].imshow((g2_so2_c[0]-np.min(g2_so2_c[0]))/np.max(g2_so2_c[0]-np.min(g2_so2_c[0])),vmin=vmin_deox0,vmax=vmax_deox0,cmap = 'RdGy_r')
+    # ax[1,0].axis('off')
+    # divider = make_axes_locatable(ax[1,0])
+    # ax_cb = divider.append_axes('right', size='5%', pad=0.1)
+    # plt.colorbar(img, cax=ax_cb)
+    # img = ax[0,1].imshow((g2_so2[1]-np.min(g2_so2[1]))/np.max(g2_so2[1]-np.min(g2_so2[1])),vmin=vmin_oxi1,vmax=vmax_oxi1,cmap = 'RdGy_r')
+    # ax[0,1].axis('off')
+    # divider = make_axes_locatable(ax[0,1])
+    # ax_cb = divider.append_axes('right', size='5%', pad=0.1)
+    # plt.colorbar(img, cax=ax_cb)
+    # img = ax[1,1].imshow((g2_so2_c[1]-np.min(g2_so2_c[1]))/np.max(g2_so2_c[1]-np.min(g2_so2_c[1])),vmin=vmin_deox1,vmax=vmax_deox1,cmap = 'RdGy_r')
+    # ax[1,1].axis('off')
+    # divider = make_axes_locatable(ax[1,1])
+    # ax_cb = divider.append_axes('right', size='5%', pad=0.1)
+    # plt.colorbar(img, cax=ax_cb)
+    # img = ax[0,2].imshow((g2_so2[2]-np.min(g2_so2[2]))/np.max(g2_so2[2]-np.min(g2_so2[2])),vmin=vmin_oxi2,vmax=vmax_oxi2,cmap = 'RdGy_r')
+    # ax[0,2].axis('off')
+    # divider = make_axes_locatable(ax[0,2])
+    # ax_cb = divider.append_axes('right', size='5%', pad=0.1)
+    # plt.colorbar(img, cax=ax_cb)
+    # img = ax[1,2].imshow((g2_so2_c[2]-np.min(g2_so2_c[2]))/np.max(g2_so2_c[2]-np.min(g2_so2_c[2])),vmin=vmin_deox2,vmax=vmax_deox2,cmap = 'RdGy_r')
+    # ax[1,2].axis('off')
+    # divider = make_axes_locatable(ax[1,2])
+    # ax_cb = divider.append_axes('right', size='5%', pad=0.1)
+    # plt.colorbar(img, cax=ax_cb)
+    # plt.tight_layout()
+    # plt.tight_layout()
+    # plt.show()
+    
+    # fig, ax = plt.subplots(2,3)
+    # fig.set_figwidth(10)
+    # fig.set_figheight(8)
+    # img = ax[0,0].imshow((g3_so2[0]-np.min(g3_so2[0]))/np.max(g3_so2[0]-np.min(g3_so2[0])),vmin=vmin_oxi0,vmax=vmax_oxi0,cmap = 'RdGy_r')
+    # ax[0,0].axis('off')
+    # divider = make_axes_locatable(ax[0,0])
+    # ax_cb = divider.append_axes('right', size='5%', pad=0.1)
+    # plt.colorbar(img, cax=ax_cb)
+    # img = ax[1,0].imshow((g3_so2_c[0]-np.min(g3_so2_c[0]))/np.max(g3_so2_c[0]-np.min(g3_so2_c[0])),vmin=vmin_deox0,vmax=vmax_deox0,cmap = 'RdGy_r')
+    # ax[1,0].axis('off')
+    # divider = make_axes_locatable(ax[1,0])
+    # ax_cb = divider.append_axes('right', size='5%', pad=0.1)
+    # plt.colorbar(img, cax=ax_cb)
+    # img = ax[0,1].imshow((g3_so2[1]-np.min(g3_so2[1]))/np.max(g3_so2[1]-np.min(g3_so2[1])),vmin=vmin_oxi1,vmax=vmax_oxi1,cmap = 'RdGy_r')
+    # ax[0,1].axis('off')
+    # divider = make_axes_locatable(ax[0,1])
+    # ax_cb = divider.append_axes('right', size='5%', pad=0.1)
+    # plt.colorbar(img, cax=ax_cb)
+    # img = ax[1,1].imshow((g3_so2_c[1]-np.min(g3_so2_c[1]))/np.max(g3_so2_c[1]-np.min(g3_so2_c[1])),vmin=vmin_deox1,vmax=vmax_deox1,cmap = 'RdGy_r')
+    # ax[1,1].axis('off')
+    # divider = make_axes_locatable(ax[1,1])
+    # ax_cb = divider.append_axes('right', size='5%', pad=0.1)
+    # plt.colorbar(img, cax=ax_cb)
+    # img = ax[0,2].imshow((g3_so2[2]-np.min(g3_so2[2]))/np.max(g3_so2[2]-np.min(g3_so2[2])),vmin=vmin_oxi2,vmax=vmax_oxi2,cmap = 'RdGy_r')
+    # ax[0,2].axis('off')
+    # divider = make_axes_locatable(ax[0,2])
+    # ax_cb = divider.append_axes('right', size='5%', pad=0.1)
+    # plt.colorbar(img, cax=ax_cb)
+    # img = ax[1,2].imshow((g3_so2_c[2]-np.min(g3_so2_c[2]))/np.max(g3_so2_c[2]-np.min(g3_so2_c[2])),vmin=vmin_deox2,vmax=vmax_deox2,cmap = 'RdGy_r')
+    # ax[1,2].axis('off')
+    # divider = make_axes_locatable(ax[1,2])
+    # ax_cb = divider.append_axes('right', size='5%', pad=0.1)
+    # plt.colorbar(img, cax=ax_cb)
+    # plt.tight_layout()
+    # plt.tight_layout()
+    # plt.show()
+    
+    # fig, ax = plt.subplots(2,3)
+    # fig.set_figwidth(10)
+    # fig.set_figheight(8)
+    # img = ax[0,0].imshow((g4_so2[0]-np.min(g4_so2[0]))/np.max(g4_so2[0]-np.min(g4_so2[0])),vmin=vmin_oxi0,vmax=vmax_oxi0,cmap = 'RdGy_r')
+    # ax[0,0].axis('off')
+    # divider = make_axes_locatable(ax[0,0])
+    # ax_cb = divider.append_axes('right', size='5%', pad=0.1)
+    # plt.colorbar(img, cax=ax_cb)
+    # img = ax[1,0].imshow((g4_so2_c[0]-np.min(g4_so2_c[0]))/np.max(g4_so2_c[0]-np.min(g4_so2_c[0])),vmin=vmin_deox0,vmax=vmax_deox0,cmap = 'RdGy_r')
+    # ax[1,0].axis('off')
+    # divider = make_axes_locatable(ax[1,0])
+    # ax_cb = divider.append_axes('right', size='5%', pad=0.1)
+    # plt.colorbar(img, cax=ax_cb)
+    # img = ax[0,1].imshow((g4_so2[1]-np.min(g4_so2[1]))/np.max(g4_so2[1]-np.min(g4_so2[1])),vmin=vmin_oxi1,vmax=vmax_oxi1,cmap = 'RdGy_r')
+    # ax[0,1].axis('off')
+    # divider = make_axes_locatable(ax[0,1])
+    # ax_cb = divider.append_axes('right', size='5%', pad=0.1)
+    # plt.colorbar(img, cax=ax_cb)
+    # img = ax[1,1].imshow((g4_so2_c[1]-np.min(g4_so2_c[1]))/np.max(g4_so2_c[1]-np.min(g4_so2_c[1])),vmin=vmin_deox1,vmax=vmax_deox1,cmap = 'RdGy_r')
+    # ax[1,1].axis('off')
+    # divider = make_axes_locatable(ax[1,1])
+    # ax_cb = divider.append_axes('right', size='5%', pad=0.1)
+    # plt.colorbar(img, cax=ax_cb)
+    # img = ax[0,2].imshow((g4_so2[2]-np.min(g4_so2[2]))/np.max(g4_so2[2]-np.min(g4_so2[2])),vmin=vmin_oxi2,vmax=vmax_oxi2,cmap = 'RdGy_r')
+    # ax[0,2].axis('off')
+    # divider = make_axes_locatable(ax[0,2])
+    # ax_cb = divider.append_axes('right', size='5%', pad=0.1)
+    # plt.colorbar(img, cax=ax_cb)
+    # img = ax[1,2].imshow((g4_so2_c[2]-np.min(g4_so2_c[2]))/np.max(g4_so2_c[2]-np.min(g4_so2_c[2])),vmin=vmin_deox2,vmax=vmax_deox2,cmap = 'RdGy_r')
+    # ax[1,2].axis('off')
+    # divider = make_axes_locatable(ax[1,2])
+    # ax_cb = divider.append_axes('right', size='5%', pad=0.1)
+    # plt.colorbar(img, cax=ax_cb)
+    # plt.tight_layout()
+    # plt.tight_layout()
+    # plt.show()
+    
+    # x_data = [1, 2, 6]
+    # x_fit = np.linspace(0,10,1000)
+
+    # coeff = np.polyfit(x_data,g1_mean, 2)
+    # y_g1 = np.poly1d(coeff)
+
+    # coeff = np.polyfit(x_data,g2_mean, 2)
+    # y_g2 = np.poly1d(coeff)
+
+    # coeff = np.polyfit(x_data,g3_mean, 2)
+    # y_g3 = np.poly1d(coeff)
+
+    # coeff = np.polyfit(x_data,g4_mean, 2)
+    # y_g4 = np.poly1d(coeff)
+
+    # plt.rcParams['font.size'] = 18
+
+    # plt.figure(figsize=(8,8))
+    # plt.errorbar(x_data, g1_mean, yerr = g1_std,  fmt='o', color= 'black', 
+    #             ecolor = 'black', elinewidth = 1, capsize = 2, label='Espécime 1')
+    # plt.plot(x_fit,y_g1(x_fit),'--k')
+
+    # plt.errorbar(x_data, g2_mean, yerr = g2_std,  fmt='o', color= 'blue', 
+    #             ecolor = 'blue', elinewidth = 1, capsize = 2, label='Espécime 2')
+    # plt.plot(x_fit,y_g2(x_fit),'--b')
+    # plt.errorbar(x_data, g3_mean, yerr = g3_std,  fmt='o', color= 'red', 
+    #             ecolor = 'red', elinewidth = 1, capsize = 2, label='Espécime 3')
+    # plt.plot(x_fit,y_g3(x_fit),'--r')
+
+    # plt.errorbar(x_data, g4_mean, yerr = g4_std,  fmt='o', color= 'green', 
+    #             ecolor = 'green', elinewidth = 1, capsize = 2, label='Espécime 4')
+    # plt.plot(x_fit,y_g4(x_fit),'--g')
+    # plt.axis([0, 10, 0, 1.2])
+    # plt.ylabel("Saturação de O$_2$ média normalizada")
+    # plt.xlabel("Tempo [dias]")
+    # plt.legend()
+    # plt.show()
+    len_ = np.max([len(g1_perfil[0]),len(g1_perfil[1]),len(g1_perfil[2])])
+    var = (len_ % 50) - 50
+    x_f = len_ + var
+    plt.figure(figsize=(8,8))
+    plt.plot(g1_perfil[0], 'g', label='Dia 1')
+    plt.plot(g1_perfil[1], 'y', label='Dia 2')
+    plt.plot(g1_perfil[2], 'b', label='Dia 5')
+    plt.legend()
+    plt.axis([0, int(x_f), 0, 1])
+    plt.ylabel("Saturação de O$_2$ [normalizada]")
+    plt.xlabel("Posição [distância entre pixels]")
+    plt.show()
+
+    # plt.figure(figsize=(8,8))
+    # plt.plot(g2_perfil[0], 'k', label='Dia 1')
+    # plt.plot(g2_perfil[1], 'b', label='Dia 2')
+    # plt.plot(g2_perfil[2], 'r', label='Dia 5')
+    # plt.legend()
+    # plt.axis([0, 600, 0, 1.4])
+    # plt.ylabel("Saturação de O$_2$ [normalizada]")
+    # plt.xlabel("Posição [distância entre pixels]")
+    # plt.show()
+
+    # plt.figure(figsize=(8,8))
+    # plt.plot(g4_perfil[0], 'k', label='Dia 1')
+    # plt.plot(g4_perfil[1], 'b', label='Dia 2')
+    # plt.plot(g4_perfil[2], 'r', label='Dia 5')
+    # plt.legend()
+    # plt.axis([0, 600, 0, 1.4])
+    # plt.ylabel("Saturação de O$_2$ [normalizada]")
+    # plt.xlabel("Posição [distância entre pixels]")
+    # plt.show()
 
     # model.stage = 'healthy'
     # for wl in isos_wl:
     #     data.save_mice_fig(model, wl)
 
-    model.type = 'Healthy Human Hand'
-    model.specimen = 'Marlon'
-    model.date = '2022.12.14'
-   
-    # isos_wl = [452, 500, 530, 546, 570, 584]
+    # model.type = 'Healthy Human Hand'
+    # model.specimen = 'Marlon'
+    # model.date = '2022.12.14'
 
-    point = [(500,710)]
+    # point = [(500,710)]
 
-    model.stage = 'repouso'
-    r_so2, r_perfil, r_mean, r_std = data.save_hand_fig(model,point)
-    r_so2_c = 255 - r_so2
-    model.stage = 'oclusao'
-    o_so2, o_perfil, o_mean, o_std = data.save_hand_fig(model,point)
-    o_so2_c = 255 - o_so2
-    model.stage = 'liberacao'
-    l_so2, l_perfil, l_mean, l_std = data.save_hand_fig(model,point)
-    l_so2_c = 255 - l_so2
+    # model.stage = 'repouso'
+    # r_so2, r_perfil, r_mean, r_std = data.save_hand_fig(model,point)
+    # r_so2_c = 255 - r_so2
+    # model.stage = 'oclusao'
+    # o_so2, o_perfil, o_mean, o_std = data.save_hand_fig(model,point)
+    # o_so2_c = 255 - o_so2
+    # model.stage = 'liberacao'
+    # l_so2, l_perfil, l_mean, l_std = data.save_hand_fig(model,point)
+    # l_so2_c = 255 - l_so2
 
-    x_data = ['Repouso', 'Oclusão', 'Liberação']
-    y_data = [r_mean, o_mean, l_mean]
-    y_data_err = [r_std, o_std, l_std]
-    plt.rcParams['font.size'] = 18
-    plt.figure(figsize=(8,8))
-    plt.bar(x_data, y_data, yerr = y_data_err, alpha = 0.5, 
-            color= 'blue', ecolor = 'black', capsize = 2)
-    plt.axis([-1, 3, 0, 0.5])
-    plt.grid(True)            
-    plt.ylabel("Saturação de O$_2$ média normalizada")
-    plt.show()
-
-    plt.figure(figsize=(8,8))
-    plt.plot(r_perfil, 'k', label='Repouso')
-    plt.plot(o_perfil, 'r', label='Oclusão')
-    plt.plot(l_perfil, 'b', label='Liberação')
-    plt.legend()
-    plt.axis([0, len(r_perfil), 0, 1.4])
-    plt.ylabel("Saturação de O$_2$ normalizada")
-    plt.xticks([])
-    plt.show()
-
-    plt.rcParams['font.size'] = 12
-    vmin_oxi0 = vmin_oxi1 = vmin_oxi2 = 0.0
-    vmax_oxi0 = vmax_oxi1 = vmax_oxi2 = 0.5
-    vmin_deox0 = vmin_deox1 = vmin_deox2 = 0.5
-    vmax_deox0 = vmax_deox1 = vmax_deox2 = 1.00
     
-    fig, ax = plt.subplots(2,3)
-    fig.set_figwidth(10)
-    fig.set_figheight(8)
-    img = ax[0,0].imshow((r_so2-np.min(r_so2))/np.max(r_so2-np.min(r_so2)),vmin=vmin_oxi0,vmax=vmax_oxi0,cmap = 'RdGy_r')
-    ax[0,0].axis('off')
-    divider = make_axes_locatable(ax[0,0])
-    ax_cb = divider.append_axes('right', size='5%', pad=0.1)
-    plt.colorbar(img, cax=ax_cb)
-    img = ax[1,0].imshow((r_so2_c-np.min(r_so2_c))/np.max(r_so2_c-np.min(r_so2_c)),vmin=vmin_deox0,vmax=vmax_deox0,cmap = 'RdGy_r')
-    ax[1,0].axis('off')
-    divider = make_axes_locatable(ax[1,0])
-    ax_cb = divider.append_axes('right', size='5%', pad=0.1)
-    plt.colorbar(img, cax=ax_cb)
-    img = ax[0,1].imshow((o_so2-np.min(o_so2))/np.max(o_so2-np.min(o_so2)),vmin=vmin_oxi1,vmax=vmax_oxi1,cmap = 'RdGy_r')
-    ax[0,1].axis('off')
-    divider = make_axes_locatable(ax[0,1])
-    ax_cb = divider.append_axes('right', size='5%', pad=0.1)
-    plt.colorbar(img, cax=ax_cb)
-    img = ax[1,1].imshow((o_so2_c-np.min(o_so2_c))/np.max(o_so2_c-np.min(o_so2_c)),vmin=vmin_deox1,vmax=vmax_deox1,cmap = 'RdGy_r')
-    ax[1,1].axis('off')
-    divider = make_axes_locatable(ax[1,1])
-    ax_cb = divider.append_axes('right', size='5%', pad=0.1)
-    plt.colorbar(img, cax=ax_cb)
-    img = ax[0,2].imshow((l_so2-np.min(l_so2))/np.max(l_so2-np.min(l_so2)),vmin=vmin_oxi2,vmax=vmax_oxi2,cmap = 'RdGy_r')
-    ax[0,2].axis('off')
-    divider = make_axes_locatable(ax[0,2])
-    ax_cb = divider.append_axes('right', size='5%', pad=0.1)
-    plt.colorbar(img, cax=ax_cb)
-    img = ax[1,2].imshow((l_so2_c-np.min(l_so2_c))/np.max(l_so2_c-np.min(l_so2_c)),vmin=vmin_deox2,vmax=vmax_deox2,cmap = 'RdGy_r')
-    ax[1,2].axis('off')
-    divider = make_axes_locatable(ax[1,2])
-    ax_cb = divider.append_axes('right', size='5%', pad=0.1)
-    plt.colorbar(img, cax=ax_cb)
-    plt.tight_layout()
-    plt.tight_layout()
+    # x_data = ['Repouso', 'Oclusão', 'Liberação']
+    # y_data = [r_mean, o_mean, l_mean]
+    # y_data_err = [r_std, o_std, l_std]
+    
+    # print(y_data)
+    # print(y_data_err)
+    # plt.rcParams['font.size'] = 18
+    # plt.figure(figsize=(8,8))
+    # plt.bar(x_data, y_data, yerr = y_data_err, alpha = 0.5, 
+    #         color= 'blue', ecolor = 'black', capsize = 2)
+    # plt.axis([-1, 3, 0, 0.5])
+    # plt.grid(True)            
+    # plt.ylabel("Saturação de O$_2$ média normalizada")
+    # plt.show()
+
+    # plt.figure(figsize=(8,8))
+    # plt.plot(r_perfil, 'k', label='Repouso')
+    # plt.plot(o_perfil, 'r', label='Oclusão')
+    # plt.plot(l_perfil, 'b', label='Liberação')
+    # plt.legend()
+    # plt.axis([0, 300, 0, 1])
+    # plt.ylabel("Saturação de O$_2$ [normalizada]")
+    # plt.xlabel("Posição [distância entre pixels]")
+    # plt.show()
+
+    # plt.rcParams['font.size'] = 12
+    # vmin_oxi0 = vmin_oxi1 = vmin_oxi2 = 0.0
+    # vmax_oxi0 = vmax_oxi1 = vmax_oxi2 = 0.5
+    # vmin_deox0 = vmin_deox1 = vmin_deox2 = 0.5
+    # vmax_deox0 = vmax_deox1 = vmax_deox2 = 1.00
+    
+    # fig, ax = plt.subplots(2,3)
+    # fig.set_figwidth(10)
+    # fig.set_figheight(8)
+    # img = ax[0,0].imshow((r_so2-np.min(r_so2))/np.max(r_so2-np.min(r_so2)),vmin=vmin_oxi0,vmax=vmax_oxi0,cmap = 'RdGy_r')
+    # ax[0,0].axis('off')
+    # divider = make_axes_locatable(ax[0,0])
+    # ax_cb = divider.append_axes('right', size='5%', pad=0.1)
+    # plt.colorbar(img, cax=ax_cb)
+    # img = ax[1,0].imshow((r_so2_c-np.min(r_so2_c))/np.max(r_so2_c-np.min(r_so2_c)),vmin=vmin_deox0,vmax=vmax_deox0,cmap = 'RdGy_r')
+    # ax[1,0].axis('off')
+    # divider = make_axes_locatable(ax[1,0])
+    # ax_cb = divider.append_axes('right', size='5%', pad=0.1)
+    # plt.colorbar(img, cax=ax_cb)
+    # img = ax[0,1].imshow((o_so2-np.min(o_so2))/np.max(o_so2-np.min(o_so2)),vmin=vmin_oxi1,vmax=vmax_oxi1,cmap = 'RdGy_r')
+    # ax[0,1].axis('off')
+    # divider = make_axes_locatable(ax[0,1])
+    # ax_cb = divider.append_axes('right', size='5%', pad=0.1)
+    # plt.colorbar(img, cax=ax_cb)
+    # img = ax[1,1].imshow((o_so2_c-np.min(o_so2_c))/np.max(o_so2_c-np.min(o_so2_c)),vmin=vmin_deox1,vmax=vmax_deox1,cmap = 'RdGy_r')
+    # ax[1,1].axis('off')
+    # divider = make_axes_locatable(ax[1,1])
+    # ax_cb = divider.append_axes('right', size='5%', pad=0.1)
+    # plt.colorbar(img, cax=ax_cb)
+    # img = ax[0,2].imshow((l_so2-np.min(l_so2))/np.max(l_so2-np.min(l_so2)),vmin=vmin_oxi2,vmax=vmax_oxi2,cmap = 'RdGy_r')
+    # ax[0,2].axis('off')
+    # divider = make_axes_locatable(ax[0,2])
+    # ax_cb = divider.append_axes('right', size='5%', pad=0.1)
+    # plt.colorbar(img, cax=ax_cb)
+    # img = ax[1,2].imshow((l_so2_c-np.min(l_so2_c))/np.max(l_so2_c-np.min(l_so2_c)),vmin=vmin_deox2,vmax=vmax_deox2,cmap = 'RdGy_r')
+    # ax[1,2].axis('off')
+    # divider = make_axes_locatable(ax[1,2])
+    # ax_cb = divider.append_axes('right', size='5%', pad=0.1)
+    # plt.colorbar(img, cax=ax_cb)
+    # plt.tight_layout()
+    # plt.tight_layout()
+    
     plt.show()
 main()
